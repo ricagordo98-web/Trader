@@ -1,6 +1,7 @@
 @page "/settings"
 @using Trader.Core.Abstractions
 @using System.Globalization
+@using Trader.Core.Agender
 @implements IDisposable
 @inject TraderApiClient Api
 @inject AuthSession Session
@@ -224,6 +225,52 @@
             <MudDivider Class="my-4" />
             <MudText Typo="Typo.h6" Class="mb-2">Regras de alerta</MudText>
             <AlertRulesPanel />
+        </MudTabPanel>
+        <MudTabPanel Text="Agender">
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Enviar as trades para o Agender</MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name mb-3">
+                    As trades do Diário (abertas e fechadas) são enviadas para o Agender, que as mostra num calendário com os ganhos e perdas por dia, semana e mês.
+                    No Agender, abre Definições → Trader, gera uma chave e cola-a aqui. O envio é automático (a cada ~20 segundos, só quando algo muda) e o Trader continua a funcionar se o Agender estiver fechado.
+                </MudText>
+                @if (_agenderError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_agenderError</MudAlert>
+                }
+                @if (_agender is not null)
+                {
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_agenderUrl" Label="Endereço do Agender" Placeholder="http://localhost:5018" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" /></MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField T="string" @bind-Value="_agenderKey" Label="Chave" InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                          HelperText="@(_agender.Settings.HasKey ? "Já há uma chave guardada. Deixa vazio para a manter." : "Gerada no Agender.")" />
+                        </MudItem>
+                    </MudGrid>
+                    <div class="d-flex flex-wrap gap-2 mt-3 mb-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SaveAgenderAsync">Guardar</MudButton>
+                        <MudButton Variant="Variant.Outlined" Disabled="@(_busy || !_agender.Status.Configured)" OnClick="SyncAgenderAsync">Enviar agora</MudButton>
+                        @if (_agender.Status.Configured)
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Error" Disabled="_busy" OnClick="RemoveAgenderAsync">Remover ligação</MudButton>
+                        }
+                    </div>
+                    @if (_agender.Status.Configured)
+                    {
+                        @if (_agender.Status.LastError is not null)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true">@_agender.Status.LastError</MudAlert>
+                        }
+                        else if (_agender.Status.LastSuccess is { } last)
+                        {
+                            <MudText Typo="Typo.caption" Class="symbol-name">Último envio: @last.ToLocalTime().ToString("dd/MM/yyyy HH:mm") · @_agender.Status.LastCount trades.</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="symbol-name">Ainda sem envios desde que o servidor arrancou.</MudText>
+                        }
+                    }
+                }
+            </MudPaper>
         </MudTabPanel>
         <MudTabPanel Text="Conta">
             <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
@@ -517,6 +564,10 @@
         _ => Color.Default
     };
     private ScoringOptions? _scoring;
+    private AgenderView? _agender;
+    private string _agenderUrl = string.Empty;
+    private string _agenderKey = string.Empty;
+    private string? _agenderError;
     private string? _ntfyTopic;
     private string _ntfyPublicUrl = string.Empty;
     private bool _ntfyPushMarket;
@@ -572,6 +623,7 @@
             _health = await Api.GetHealthAsync(_cts.Token);
             _scoring = await Api.GetScoringAsync(_cts.Token);
             NtfySettings ntfy = await Api.GetNtfyAsync(_cts.Token);
+            await LoadAgenderAsync();
             _ntfyTopic = ntfy.Topic;
             _ntfyServer = ntfy.Server;
             _ntfyPublicUrl = ntfy.PublicUrl;
@@ -715,6 +767,60 @@
         {
             _priceAlerts = await Api.GetPriceAlertsAsync(_cts.Token);
         }
+    }
+
+    private async Task LoadAgenderAsync()
+    {
+        _agender = await Api.GetAgenderAsync(_cts.Token);
+        _agenderUrl = _agender.Settings.Url;
+    }
+
+    private async Task SaveAgenderAsync()
+    {
+        _busy = true;
+        _agenderError = await Api.SaveAgenderAsync(new SaveAgenderSettingsRequest(_agenderUrl, _agenderKey), _cts.Token);
+
+        if (_agenderError is null)
+        {
+            _agenderKey = string.Empty;
+            await LoadAgenderAsync();
+            Snackbar.Add("Ligação ao Agender guardada.", Severity.Success);
+        }
+
+        _busy = false;
+    }
+
+    private async Task SyncAgenderAsync()
+    {
+        _busy = true;
+        _agenderError = null;
+
+        try
+        {
+            AgenderStatus status = await Api.SyncAgenderAsync(_cts.Token);
+            await LoadAgenderAsync();
+            Snackbar.Add(status.LastError is null ? "Trades enviadas." : "Não foi possível enviar.", status.LastError is null ? Severity.Success : Severity.Warning);
+        }
+        catch (HttpRequestException)
+        {
+            _agenderError = "Não foi possível falar com o servidor do Trader.";
+        }
+
+        _busy = false;
+    }
+
+    private async Task RemoveAgenderAsync()
+    {
+        _busy = true;
+        _agenderError = await Api.RemoveAgenderAsync(_cts.Token);
+
+        if (_agenderError is null)
+        {
+            await LoadAgenderAsync();
+            Snackbar.Add("Ligação ao Agender removida. As trades já enviadas ficam no Agender.", Severity.Success);
+        }
+
+        _busy = false;
     }
 
     private async Task SaveNtfyAsync()

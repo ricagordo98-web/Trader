@@ -35,7 +35,7 @@ public static partial class PriceSources
             return new PriceSourceInfo(Yahoo, "Bolsas dos EUA (via Finnhub)", "Trades ao vivo das bolsas dos EUA. A tua corretora pode cotar CFDs com spread e fora de horas de forma diferente.");
         }
 
-        return new PriceSourceInfo(Yahoo, null, "Cotação do Yahoo Finance, que pode ter atraso (segundos em futuros e índices, até 15 minutos em algumas bolsas).");
+        return new PriceSourceInfo(Yahoo, null, "Cotação do Yahoo Finance, que pode ter atraso (cerca de 10 minutos em futuros e até 15 minutos em índices e bolsas europeias).");
     }
 
     [GeneratedRegex("^[A-Z]{1,5}$")]

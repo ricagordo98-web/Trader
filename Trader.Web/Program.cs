@@ -114,6 +114,7 @@ app.MapBacktestEndpoints();
 app.MapJournalEndpoints();
 app.MapAlertEndpoints();
 app.MapSystemEndpoints();
+app.MapAgenderEndpoints();
 app.MapCalendarEndpoints();
 app.MapChartTemplateEndpoints();
 app.MapSummaryEndpoints();

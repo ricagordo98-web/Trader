@@ -21,7 +21,7 @@
                        OnClick="@(() => TimeframeChanged.InvokeAsync(index))">@Timeframes[index].Label</MudButton>
         }
         <MudSpacer />
-        <span class="chart-panel-live @(_streaming ? "on" : string.Empty)" title="@(_streaming ? "Em direto" : "Sem dados em direto")"></span>
+        <span class="chart-panel-live @(Live ? "on" : string.Empty)" title="@LiveTitle"></span>
         <MudTooltip Text="@(Maximized ? "Restaurar" : "Ver só este gráfico")">
             <MudIconButton Icon="@(Maximized ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" aria-label="@(Maximized ? "Restaurar gráfico" : "Maximizar gráfico")" OnClick="OnToggleMaximize" />
         </MudTooltip>
@@ -98,6 +98,14 @@
                 || i.Name.Contains(value, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(i => i.Symbol.StartsWith(value ?? string.Empty, StringComparison.OrdinalIgnoreCase))
             .Select(i => i.Symbol));
+
+    private PriceSourceInfo Source => PriceSources.Describe(Symbol, Quote?.AssetClass ?? AssetClass.Stock, CryptoBasis.Usd);
+
+    private bool Live => _streaming && Source.Live is not null;
+
+    private string LiveTitle => Live
+        ? $"Em direto · {Source.Live}"
+        : Source.Live is null ? "Sem feed em direto: preço do Yahoo, pode estar atrasado" : "Sem dados em direto";
 
     private bool HasVolume => Quote?.AssetClass is not (AssetClass.Forex or AssetClass.Index);
 

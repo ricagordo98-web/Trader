@@ -16,6 +16,9 @@ public sealed class FinnhubTradeFeed(IOptions<SourcesOptions> options, ILogger<F
     private const int MaxTradesPerSymbol = 20_000;
     private static readonly TimeSpan Retention = TimeSpan.FromHours(3);
     private static readonly TimeSpan IdleAfter = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan SilenceLimit = TimeSpan.FromSeconds(60);
+
+    private DateTimeOffset _lastMessage;
 
     private sealed class SymbolState
     {
@@ -108,16 +111,30 @@ public sealed class FinnhubTradeFeed(IOptions<SourcesOptions> options, ILogger<F
         using ClientWebSocket socket = new();
         await socket.ConnectAsync(new Uri($"wss://ws.finnhub.io?token={Uri.EscapeDataString(_apiKey)}"), cancellationToken);
         logger.LogInformation("Finnhub trade feed connected");
+        _lastMessage = DateTimeOffset.UtcNow;
 
         Task receiving = ReceiveAsync(socket, cancellationToken);
 
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open && !receiving.IsCompleted)
         {
+            if (DateTimeOffset.UtcNow - _lastMessage > SilenceLimit && _symbols.Values.Any(s => s.Subscribed))
+            {
+                logger.LogWarning("Finnhub trade feed silent for {Seconds}s, reconnecting", SilenceLimit.TotalSeconds);
+                socket.Abort();
+                break;
+            }
+
             await SyncSubscriptionsAsync(socket, cancellationToken);
             await Task.WhenAny(receiving, Task.Delay(1000, cancellationToken));
         }
 
-        await receiving;
+        try
+        {
+            await receiving;
+        }
+        catch (WebSocketException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     private async Task SyncSubscriptionsAsync(ClientWebSocket socket, CancellationToken cancellationToken)
@@ -167,6 +184,7 @@ public sealed class FinnhubTradeFeed(IOptions<SourcesOptions> options, ILogger<F
                 return;
             }
 
+            _lastMessage = DateTimeOffset.UtcNow;
             message.Write(buffer, 0, result.Count);
 
             if (!result.EndOfMessage)

@@ -1,3 +1,4 @@
+using Trader.Infrastructure.Agender;
 using Trader.Infrastructure.Alerts;
 using Trader.Infrastructure.Backup;
 using Trader.Infrastructure.Calendar;
@@ -9,6 +10,7 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Trader.Core.Abstractions;
 using Trader.Core.Scoring;
@@ -80,6 +82,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHostedService<SummaryWorker>();
         services.AddScoped<IChartTemplateService, ChartTemplateService>();
         services.AddScoped<IAlertService, AlertService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<AgenderSyncState>();
+        services.AddHttpClient(AgenderSyncService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddScoped<IAgenderSync, AgenderSyncService>();
+        services.AddHostedService<AgenderSyncWorker>();
         services.AddHttpClient<IAlertPublisher, NtfyPublisher>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IInstrumentService, InstrumentService>();
         services.AddSingleton<ISourceStatusRegistry, SourceStatusRegistry>();

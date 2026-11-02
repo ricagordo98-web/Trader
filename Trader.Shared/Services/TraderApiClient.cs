@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Trader.Core.Agender;
 using Trader.Core.Alerts;
 using Trader.Core.Backtesting;
 using Trader.Core.Charts;
@@ -100,6 +101,29 @@ public sealed class TraderApiClient(HttpClient httpClient)
     {
         using HttpResponseMessage response = await httpClient.DeleteAsync("api/system/import", cancellationToken);
         return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<AgenderView> GetAgenderAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<AgenderView>("api/agender", cancellationToken)
+        ?? new AgenderView(new AgenderSettings(string.Empty, false), new AgenderStatus(false, null, null, 0));
+
+    public async Task<string?> SaveAgenderAsync(SaveAgenderSettingsRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PutAsJsonAsync("api/agender", request, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<string?> RemoveAgenderAsync(CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.DeleteAsync("api/agender", cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<AgenderStatus> SyncAgenderAsync(CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsync("api/agender/sync", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<AgenderStatus>(cancellationToken))!;
     }
 
     public async Task<NtfySettings> GetNtfyAsync(CancellationToken cancellationToken = default) =>
