@@ -192,7 +192,11 @@
         {
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Trader.Shared/js/workspace.js");
             _self = DotNetObjectReference.Create(this);
-            await _module.InvokeVoidAsync("init", _id, _workspace, _self);
+            if (!await _module.InvokeAsync<bool>("init", _id, _workspace, _self))
+            {
+                return;
+            }
+
             await MeasureAsync();
 
             if (_needsArrange)

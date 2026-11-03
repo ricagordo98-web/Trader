@@ -5,6 +5,10 @@ const MIN_HEIGHT = 220;
 const INTERACTIVE = 'button, a, input, textarea, select, .mud-select, .mud-input-control, .mud-menu';
 
 export function init(id, element, dotnet) {
+    if (!(element instanceof Element)) {
+        return false;
+    }
+
     const state = { element, dotnet, action: null, topZ: 10 };
 
     state.onDown = event => {
@@ -88,6 +92,7 @@ export function init(id, element, dotnet) {
     window.addEventListener('pointerup', state.onUp);
     window.addEventListener('pointercancel', state.onUp);
     workspaces.set(id, state);
+    return true;
 }
 
 export function measure(element) {
