@@ -204,6 +204,19 @@ public class BacktestRunnerTests
     }
 
     [Fact]
+    public void Run_SymbolWithZeroCloseAtStart_KeepsBuyAndHoldFinite()
+    {
+        List<SymbolHistory> histories = Histories(900);
+        List<Candle> candles = histories[0].Candles.ToList();
+        candles[BacktestRunner.WarmupBars] = candles[BacktestRunner.WarmupBars] with { Close = 0 };
+        histories[0] = histories[0] with { Candles = candles };
+
+        BacktestResult result = BacktestRunner.Run(histories, new ScoringOptions(), new BacktestRequest(), DateTimeOffset.UtcNow);
+
+        double.IsFinite(result.BuyAndHoldPercent).Should().BeTrue();
+    }
+
+    [Fact]
     public void Run_WithoutSentiment_KeepsTechnicalOnlyNote()
     {
         BacktestResult result = BacktestRunner.Run(Histories(900), new ScoringOptions(), new BacktestRequest(), DateTimeOffset.UtcNow);

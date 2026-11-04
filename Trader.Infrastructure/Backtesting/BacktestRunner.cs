@@ -78,7 +78,10 @@ public static class BacktestRunner
             tested++;
             from = firstDay < from ? firstDay : from;
             to = candles[^1].Time > to ? candles[^1].Time : to;
-            buyAndHold.Add((candles[^1].Close / candles[WarmupBars].Close - 1) * 100);
+            if (candles[WarmupBars].Close > 0)
+            {
+                buyAndHold.Add((candles[^1].Close / candles[WarmupBars].Close - 1) * 100);
+            }
 
             for (int i = WarmupBars; i < candles.Count - 1; i++)
             {
