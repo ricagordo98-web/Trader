@@ -313,6 +313,8 @@ export function setData(id, symbol, pricePrecision, interval, candles) {
     state.raw = candles.map(toBar);
     state.data = displayData(state);
     state.interval = interval;
+    const flat = state.raw.length > 0 && state.raw.filter(b => b.open === b.high && b.high === b.low && b.low === b.close).length / state.raw.length > 0.8;
+    state.chart.setStyles({ candle: { type: flat && state.kind === 'candle_solid' ? 'area' : (state.kind === 'heikin' ? 'candle_solid' : state.kind) } });
     state.chart.setSymbol({ ticker: symbol, pricePrecision, volumePrecision: 0 });
     state.chart.setPeriod(periods[interval] ?? periods['1d']);
     state.chart.resetData();
