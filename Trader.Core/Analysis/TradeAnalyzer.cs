@@ -16,7 +16,16 @@ public static class TradeAnalyzer
         TradeContext context,
         AnalysisHistory? history,
         IReadOnlyList<string> upcomingEvents,
-        DateTimeOffset now)
+        DateTimeOffset now) =>
+        Build(request, context, history, upcomingEvents, now, true);
+
+    private static TradeAnalysis Build(
+        TradeAnalysisRequest request,
+        TradeContext context,
+        AnalysisHistory? history,
+        IReadOnlyList<string> upcomingEvents,
+        DateTimeOffset now,
+        bool withAlternative)
     {
         MarketSnapshot market = context.Market;
         ScoringOptions options = context.Scoring;
@@ -62,6 +71,10 @@ public static class TradeAnalyzer
 
         (string code, string verdict) = Verdict(score);
 
+        AlternativeTrade? alternative = withAlternative
+            ? BuildAlternative(request, context, history, upcomingEvents, now, modelDirection, engine)
+            : null;
+
         return new TradeAnalysis(
             request.Symbol,
             context.Name,
@@ -81,7 +94,40 @@ public static class TradeAnalyzer
             context.Sentiment,
             history,
             upcomingEvents,
-            now);
+            now,
+            alternative);
+    }
+
+    private static AlternativeTrade? BuildAlternative(
+        TradeAnalysisRequest request,
+        TradeContext context,
+        AnalysisHistory? history,
+        IReadOnlyList<string> upcomingEvents,
+        DateTimeOffset now,
+        TradeDirection? modelDirection,
+        SuggestionEngine engine)
+    {
+        TradeDirection direction = modelDirection ?? request.Direction;
+        double price = context.Market.Price;
+        (double stop, double target) = engine.ComputeLevels(context.Market, direction);
+        TradeAnalysisRequest alternative = new(request.Symbol, direction, price, stop, target);
+
+        if (TradeAnalysisValidator.Validate(alternative).Count > 0)
+        {
+            return null;
+        }
+
+        TradeAnalysis analysis = Build(alternative, context, direction == request.Direction ? history : null, upcomingEvents, now, false);
+
+        string reason = modelDirection switch
+        {
+            null => "O modelo não vê uma direção clara, por isso mantém a tua direção mas com stop e alvo calculados pela volatilidade e pela estrutura do preço, entrando ao preço atual.",
+            _ when modelDirection == request.Direction => "O modelo concorda com a tua direção. Esta versão entra ao preço atual com o stop e o alvo que o modelo calcula pela volatilidade e pela estrutura do preço.",
+            TradeDirection.Buy => "O modelo inclina-se para comprar, ao contrário da tua venda. Esta é a compra que ele montaria ao preço atual.",
+            _ => "O modelo inclina-se para vender, ao contrário da tua compra. Esta é a venda que ele montaria ao preço atual."
+        };
+
+        return new AlternativeTrade(direction, price, stop, target, analysis.RiskReward, analysis.Score, analysis.VerdictCode, analysis.Verdict, reason);
     }
 
     private static void AddRiskReward(List<AnalysisFinding> findings, double riskReward, ScoringOptions options)

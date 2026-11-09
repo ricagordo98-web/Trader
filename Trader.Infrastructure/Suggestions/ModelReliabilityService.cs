@@ -19,7 +19,7 @@ public sealed class ModelReliabilityService(TraderDbContext dbContext, IMarketDa
 
     public async Task<ModelReliabilityReport> GetReportAsync(SuggestionHorizon? horizon, CancellationToken cancellationToken)
     {
-        return ModelReliability.CalculateWithShadow(await LoadClosedAsync(horizon, cancellationToken));
+        return ModelReliability.CalculateWithShadow(await LoadClosedAsync(horizon, cancellationToken, includeProjection: true));
     }
 
     public async Task<WeightLearning> GetWeightLearningAsync(SuggestionHorizon horizon, CancellationToken cancellationToken)
@@ -102,9 +102,10 @@ public sealed class ModelReliabilityService(TraderDbContext dbContext, IMarketDa
         cache.Remove(MetaModelStore.CacheKey(horizon));
     }
 
-    private async Task<List<SuggestionDto>> LoadClosedAsync(SuggestionHorizon? horizon, CancellationToken cancellationToken)
+    private async Task<List<SuggestionDto>> LoadClosedAsync(SuggestionHorizon? horizon, CancellationToken cancellationToken, bool includeProjection = false)
     {
-        IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking().Where(s => s.Status != SuggestionStatus.Open);
+        IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking()
+            .Where(s => s.Status != SuggestionStatus.Open && (includeProjection || s.Variant != SuggestionVariants.Projection));
 
         if (horizon is not null)
         {

@@ -51,7 +51,10 @@ public sealed record ModelReliabilityReport(
     double AverageGrossR = 0,
     double AverageCostR = 0,
     int IndependentCases = 0,
-    Interval? ClusteredAverageRCi = null);
+    Interval? ClusteredAverageRCi = null,
+    ProjectionPerformance? Projection = null);
+
+public sealed record ProjectionPerformance(int Count, double PredictedWinRate, double ActualWinRate, int TargetHits, int StopHits, int Expired, double AverageR);
 
 public sealed record ExcursionAnalysis(
     int Samples,
@@ -196,8 +199,10 @@ public static class ModelReliability
         return sorted.Length == 0 ? 0 : sorted.Length % 2 == 1 ? sorted[sorted.Length / 2] : (sorted[sorted.Length / 2 - 1] + sorted[sorted.Length / 2]) / 2;
     }
 
-    public static ModelReliabilityReport CalculateWithShadow(IReadOnlyList<SuggestionDto> closed, TimeZoneInfo? zone = null)
+    public static ModelReliabilityReport CalculateWithShadow(IReadOnlyList<SuggestionDto> allClosed, TimeZoneInfo? zone = null)
     {
+        List<SuggestionDto> projections = allClosed.Where(s => s.Variant == SuggestionVariants.Projection && s.RMultiple is not null).ToList();
+        List<SuggestionDto> closed = allClosed.Where(s => s.Variant != SuggestionVariants.Projection).ToList();
         List<SuggestionDto> shown = closed.Where(s => !s.IsShadow).ToList();
         List<SuggestionDto> hidden = closed.Where(s => s.IsShadow && s.RMultiple is not null).ToList();
 
@@ -221,13 +226,32 @@ public static class ModelReliability
             Shadow = new ShadowAnalysis(Stat("Mostradas", shown.Where(s => s.RMultiple is not null).ToList()), Stat("Só registo (sombra)", hidden), byReason),
             ByAssetClass = Group(shownDone, s => s.Class is { } c ? ClassLabel(c) : "Desconhecida"),
             ByHour = Group(shownDone, s => $"{TimeZoneInfo.ConvertTime(s.CreatedAt, zone).Hour:00}h").OrderBy(g => g.Name, StringComparer.Ordinal).ToList(),
-            ByVariant = Group(everything.Where(s => s.Variant == "B" || !s.IsShadow).ToList(), s => s.Variant == "B" ? "Variante B (teste)" : "Variante A (em uso)"),
+            ByVariant = Group(everything.Where(s => s.Variant == "B" || !s.IsShadow).Concat(projections).ToList(), VariantLabel),
+            Projection = ProjectionStats(projections),
             Excursions = AnalyzeExcursions(everything),
             SmartExit = CompareSmartExit(everything),
             AverageGrossR = shownDone.Count == 0 ? 0 : shownDone.Average(s => s.RMultiple!.Value),
             AverageCostR = shownDone.Count == 0 ? 0 : shownDone.Average(s => s.CostR ?? 0)
         };
     }
+
+    private static string VariantLabel(SuggestionDto s) => s.Variant switch
+    {
+        "B" => "Variante B (teste)",
+        SuggestionVariants.Projection => "Projeção (alvos do gráfico)",
+        _ => "Variante A (em uso)"
+    };
+
+    private static ProjectionPerformance? ProjectionStats(IReadOnlyList<SuggestionDto> items) => items.Count == 0
+        ? null
+        : new ProjectionPerformance(
+            items.Count,
+            items.Average(s => s.Confidence),
+            items.Count(s => R(s) > 0) / (double)items.Count,
+            items.Count(s => s.Status == SuggestionStatus.HitTakeProfit),
+            items.Count(s => s.Status == SuggestionStatus.HitStopLoss),
+            items.Count(s => s.Status == SuggestionStatus.Expired),
+            items.Average(s => R(s)));
 
     private static string ClassLabel(AssetClass assetClass) => assetClass switch
     {

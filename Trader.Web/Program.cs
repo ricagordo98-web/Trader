@@ -116,6 +116,7 @@ app.MapAlertEndpoints();
 app.MapSystemEndpoints();
 app.MapAgenderEndpoints();
 app.MapAnalysisEndpoints();
+app.MapProjectionEndpoints();
 app.MapCalendarEndpoints();
 app.MapChartTemplateEndpoints();
 app.MapSummaryEndpoints();

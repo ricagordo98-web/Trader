@@ -36,7 +36,7 @@
         <MudTabs Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_tab">
             <MudTabPanel Text="Calculadora">
                 <PositionCalculatorPanel Account="_account" Watchlist="_watchlist" Quotes="_quotes" OpenSuggestions="_openSuggestions"
-                                         Initial="_prefill" Costs="_costs" OnRegister="OpenTradeDialogAsync" OnSaveAccount="SaveAccountAsync" />
+                                         Initial="_prefill" Costs="_costs" Leverage="_leverage" OnRegister="OpenTradeDialogAsync" OnSaveAccount="SaveAccountAsync" />
             </MudTabPanel>
 
             <MudTabPanel Text="@($"Trades ({_trades.Count})")">
@@ -175,6 +175,7 @@
     private JournalInsights _insights = new(0, [], [], [], [], [], [], [], [], 0, 0, null, null);
     private DailyRiskStatus? _risk;
     private CostModel _costs = new();
+    private LeverageSettings _leverage = new();
     private TradePrefill? _prefill;
     private TradeStatus? _filter;
     private string? _error;
@@ -246,7 +247,9 @@
         try
         {
             _account = await Api.GetAccountAsync(_cts.Token);
-            _costs = (await Api.GetProfileAsync(_cts.Token)).Costs ?? new CostModel();
+            UserPreferences profile = await Api.GetProfileAsync(_cts.Token);
+            _costs = profile.Costs ?? new CostModel();
+            _leverage = profile.Leverage ?? new LeverageSettings();
             _watchlist = await Api.GetWatchlistAsync(_cts.Token);
             _quotes = (await Api.GetInstrumentsAsync(_cts.Token, native: true)).ToDictionary(q => q.Symbol);
             _openSuggestions = await Api.GetSuggestionsAsync(null, true, 100, _cts.Token, native: true);

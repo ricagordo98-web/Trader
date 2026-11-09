@@ -100,6 +100,31 @@
                 </div>
             </MudPaper>
             <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Gráfico da Projeção</MudText>
+                <MudSelect T="string" Label="Estilo" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:260px"
+                           Value="_profile.ProjectionChartKind" ValueChanged="@((string? kind) => SaveProfileAsync(_profile with { ProjectionChartKind = kind ?? ChartKinds.Candles }))">
+                    @foreach (BrokerOption option in ChartKinds.Options)
+                    {
+                        <MudSelectItem Value="@option.Key">@option.Label</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudText Typo="Typo.caption" Class="symbol-name">Como as velas reais e projetadas são desenhadas na página Projeção. Por omissão, velas.</MudText>
+            </MudPaper>
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Alavancagem por omissão</MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">
+                    A que a tua corretora te dá em cada tipo de ativo (1 = sem alavancagem). É usada como valor inicial na calculadora, nos gráficos e na Análise, e podes sempre alterá-la em cada trade.
+                </MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="6" sm="4" md="2"><MudNumericField T="double" Label="Ações (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Value="Leverage.Stock" ValueChanged="@((double v) => SaveLeverageAsync(Leverage with { Stock = v }))" /></MudItem>
+                    <MudItem xs="6" sm="4" md="2"><MudNumericField T="double" Label="ETFs (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Value="Leverage.Etf" ValueChanged="@((double v) => SaveLeverageAsync(Leverage with { Etf = v }))" /></MudItem>
+                    <MudItem xs="6" sm="4" md="2"><MudNumericField T="double" Label="Matérias-primas (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Value="Leverage.Commodity" ValueChanged="@((double v) => SaveLeverageAsync(Leverage with { Commodity = v }))" /></MudItem>
+                    <MudItem xs="6" sm="4" md="2"><MudNumericField T="double" Label="Forex (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Value="Leverage.Forex" ValueChanged="@((double v) => SaveLeverageAsync(Leverage with { Forex = v }))" /></MudItem>
+                    <MudItem xs="6" sm="4" md="2"><MudNumericField T="double" Label="Cripto (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Value="Leverage.Crypto" ValueChanged="@((double v) => SaveLeverageAsync(Leverage with { Crypto = v }))" /></MudItem>
+                    <MudItem xs="6" sm="4" md="2"><MudNumericField T="double" Label="Índices (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Value="Leverage.Index" ValueChanged="@((double v) => SaveLeverageAsync(Leverage with { Index = v }))" /></MudItem>
+                </MudGrid>
+            </MudPaper>
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
                 <MudText Typo="Typo.subtitle1" Class="mb-2">Horário silencioso</MudText>
                 <div class="d-flex align-center gap-3">
                     <MudNumericField T="int?" Label="Das (hora)" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Style="max-width:120px"
@@ -665,6 +690,10 @@
     private Task SetBrokerAsync(string? broker) => SaveProfileAsync(_profile with { Broker = broker ?? BrokerCatalog.Other });
 
     private Task SetProfileCurrencyAsync(string? currency) => SaveProfileAsync(_profile with { DisplayCurrency = currency ?? string.Empty });
+
+    private LeverageSettings Leverage => _profile.Leverage ?? new LeverageSettings();
+
+    private Task SaveLeverageAsync(LeverageSettings leverage) => SaveProfileAsync(_profile with { Leverage = leverage });
 
     private Task SetNarrativeAsync(bool enabled) => SaveProfileAsync(_profile with { NarrativeEnabled = enabled });
 

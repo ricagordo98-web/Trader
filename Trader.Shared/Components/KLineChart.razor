@@ -201,6 +201,14 @@
         }
     }
 
+    public async Task SetProjectionAsync(string kind, IReadOnlyList<Candle> history, IReadOnlyList<ProjectedBar> bars, IReadOnlyList<ProjectionBand> bands, IReadOnlyList<ChartLevel> levels)
+    {
+        if (_module is not null && _created)
+        {
+            await _module.InvokeVoidAsync("setProjection", _id, kind, history, bars, bands, levels);
+        }
+    }
+
     public async Task PushBarAsync(Candle candle)
     {
         if (_module is not null)

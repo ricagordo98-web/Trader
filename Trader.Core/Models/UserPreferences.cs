@@ -12,11 +12,27 @@ public sealed record UserPreferences(
     IReadOnlyList<string>? Favorites = null,
     bool PushMarketAlerts = false,
     bool ShowShadowSuggestions = false,
-    double MinDisplayedConfidence = 0)
+    double MinDisplayedConfidence = 0,
+    Trader.Core.Journal.LeverageSettings? Leverage = null,
+    string ProjectionChartKind = ChartKinds.Candles)
 {
     public static readonly UserPreferences Default = new(BrokerCatalog.Other, null, [], true);
 
     public bool Allows(AssetClass assetClass) => EnabledClasses.Count == 0 || EnabledClasses.Contains(assetClass);
+}
+
+public static class ChartKinds
+{
+    public const string Candles = "candle_solid";
+
+    public static readonly IReadOnlyList<BrokerOption> Options =
+    [
+        new(Candles, "Velas"),
+        new("candle_stroke", "Velas ocas"),
+        new("ohlc", "Barras OHLC"),
+        new("area", "Área"),
+        new("heikin", "Heikin-Ashi")
+    ];
 }
 
 public sealed record BrokerOption(string Key, string Label);
@@ -89,6 +105,16 @@ public static class UserPreferencesValidator
         if (preferences.Costs is { } costs && !CostsInRange(costs))
         {
             errors.Add("Os custos têm de estar entre 0% e 5%.");
+        }
+
+        if (ChartKinds.Options.All(o => o.Key != preferences.ProjectionChartKind))
+        {
+            errors.Add("Estilo de gráfico desconhecido.");
+        }
+
+        if (preferences.Leverage is { } leverage && !leverage.IsInRange())
+        {
+            errors.Add($"A alavancagem tem de estar entre {Trader.Core.Journal.LeverageSettings.Min:0}x e {Trader.Core.Journal.LeverageSettings.Max:0}x.");
         }
 
         if (preferences.EnabledClasses.Any(c => !Enum.IsDefined(c)))

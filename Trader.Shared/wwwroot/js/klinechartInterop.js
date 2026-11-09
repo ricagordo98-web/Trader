@@ -15,6 +15,7 @@ const periods = {
 let rectangleRegistered = false;
 let extrasRegistered = false;
 let compareRegistered = false;
+let projectionRegistered = false;
 
 const baseOverlay = {
     needDefaultPointFigure: true,
@@ -108,6 +109,83 @@ function registerExtras() {
     });
 
     extrasRegistered = true;
+}
+
+function registerProjection() {
+    if (projectionRegistered) {
+        return;
+    }
+
+    projectionRegistered = true;
+
+    const band = (key, title, size) => ({
+        key,
+        title,
+        type: 'line',
+        styles: () => ({ color: '#F59E0B', size, style: 'dashed', dashedValue: [4, 4] })
+    });
+
+    window.klinecharts.registerIndicator({
+        name: 'PROJECTION',
+        shortName: 'Projeção',
+        series: 'price',
+        precision: 4,
+        figures: [band('p90', 'P90: ', 1), band('p75', 'P75: ', 1), band('p25', 'P25: ', 1), band('p10', 'P10: ', 1)],
+        calc: (dataList, indicator) => {
+            const values = indicator.extendData?.values;
+            return dataList.map(bar => values?.[bar.timestamp] ?? {});
+        }
+    });
+}
+
+export function setProjection(id, kind, history, bars, bands, levels) {
+    const state = charts.get(id);
+    clearProjection(id);
+
+    const projected = bars.map(b => ({ timestamp: Date.parse(b.time), open: b.open, high: b.high, low: b.low, close: b.close, volume: 0 }));
+    const past = history.map(toBar);
+    const lastPast = past[past.length - 1];
+
+    state.raw = [...past, ...projected];
+    state.kind = kind;
+    state.data = displayData(state);
+    state.interval = '5m';
+    state.chart.setStyles({ candle: { type: kind === 'heikin' ? 'candle_solid' : kind } });
+    state.chart.setSymbol({ ticker: 'PROJECTION', pricePrecision: lastPast.close >= 100 ? 2 : lastPast.close >= 1 ? 4 : 5, volumePrecision: 0 });
+    state.chart.setPeriod(periods['5m']);
+    state.chart.resetData();
+
+    const values = {};
+    values[lastPast.timestamp] = { p10: lastPast.close, p25: lastPast.close, p75: lastPast.close, p90: lastPast.close };
+    for (const band of bands) {
+        values[Date.parse(band.time)] = { p10: band.p10, p25: band.p25, p75: band.p75, p90: band.p90 };
+    }
+
+    state.chart.createIndicator({ name: 'PROJECTION', extendData: { values }, paneId: 'candle_pane' }, true);
+    state.projectionActive = true;
+
+    state.projectionLineId = state.chart.createOverlay({
+        name: 'verticalStraightLine',
+        points: [{ timestamp: lastPast.timestamp }],
+        lock: true,
+        styles: { line: { color: '#F59E0B', style: 'dashed', dashedValue: [6, 4], size: 1 } }
+    });
+
+    setLevels(id, levels ?? []);
+}
+
+export function clearProjection(id) {
+    const state = charts.get(id);
+
+    if (state?.projectionActive) {
+        state.chart.removeIndicator({ paneId: 'candle_pane', name: 'PROJECTION' });
+        state.projectionActive = false;
+    }
+
+    if (state?.projectionLineId) {
+        state.chart.removeOverlay({ id: state.projectionLineId });
+        state.projectionLineId = null;
+    }
 }
 
 function registerCompare() {
@@ -236,6 +314,7 @@ export function create(id, container, dotnet, dark, showVolume) {
     registerRectangle();
     registerExtras();
     registerCompare();
+    registerProjection();
 
     const chart = window.klinecharts.init(container, { timezone: 'Europe/Lisbon' });
     const state = {

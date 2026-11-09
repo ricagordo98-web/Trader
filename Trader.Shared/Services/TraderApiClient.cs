@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Trader.Core.Agender;
 using Trader.Core.Analysis;
+using Trader.Core.Projection;
 using Trader.Core.Alerts;
 using Trader.Core.Backtesting;
 using Trader.Core.Charts;
@@ -126,6 +127,15 @@ public sealed class TraderApiClient(HttpClient httpClient)
 
         return response.IsSuccessStatusCode
             ? (await response.Content.ReadFromJsonAsync<TradeAnalysis>(cancellationToken), null)
+            : (null, await ApiError.ReadAsync(response));
+    }
+
+    public async Task<(PriceProjection? Projection, string? Error)> GetProjectionAsync(string symbol, int horizonMinutes, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.GetAsync($"api/projection/{Uri.EscapeDataString(symbol)}?horizon={horizonMinutes}", cancellationToken);
+
+        return response.IsSuccessStatusCode
+            ? (await response.Content.ReadFromJsonAsync<PriceProjection>(cancellationToken), null)
             : (null, await ApiError.ReadAsync(response));
     }
 

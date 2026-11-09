@@ -115,6 +115,20 @@
         </MudPaper>
     }
 
+    @if (report.Projection is { } projection)
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4 mt-2">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">Projeções de preço: previsto contra real</MudText>
+            <MudText Typo="Typo.body2">
+                @projection.Count projeções já avaliadas. A simulação previa em média <strong>@projection.PredictedWinRate.ToString("P0", Pt)</strong> de resultados positivos e o real foi <strong>@projection.ActualWinRate.ToString("P0", Pt)</strong>.
+                Alvos atingidos: @projection.TargetHits · stops atingidos: @projection.StopHits · expiradas: @projection.Expired · R médio líquido: <strong>@projection.AverageR.ToString("+0.00;-0.00;0.00", Pt)</strong>.
+            </MudText>
+            <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                Cada projeção gerada na página Projeção regista o seu alvo e stop e é avaliada contra o preço real, sem aparecer nas tuas sugestões nem influenciar o modelo. Se o previsto e o real andam longe um do outro, ou o R médio é negativo, a projeção não tem vantagem. Com poucas projeções o número é só indicativo.
+            </MudText>
+        </MudPaper>
+    }
+
     @if (report.Shadow is { } shadow && (shadow.Hidden is not null || shadow.ByReason.Count > 0))
     {
         <MudPaper Elevation="0" Outlined="true" Class="pa-4 mt-2">

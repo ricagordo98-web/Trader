@@ -20,6 +20,11 @@ public enum SuggestionStatus
     Expired
 }
 
+public static class SuggestionVariants
+{
+    public const string Projection = "P";
+}
+
 public sealed class Suggestion
 {
     public long Id { get; set; }

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Trader.Core.Analysis;
+using Trader.Core.Journal;
 using Trader.Core.Models;
 using Trader.Core.Scoring;
 
@@ -126,6 +127,46 @@ public class TradeAnalysisTests
         sell.Model.Levels.StopLoss.Should().BeGreaterThan(sell.Price);
         sell.Model.Levels.TakeProfit.Should().BeLessThan(sell.Price);
     }
+
+    [Theory]
+    [InlineData(TradeDirection.Buy, 95, 110)]
+    [InlineData(TradeDirection.Sell, 105, 90)]
+    public void Analyze_Alternative_IsAValidTradeAtTheCurrentPrice(TradeDirection direction, double stop, double target)
+    {
+        TradeAnalysis analysis = Analyze(new TradeAnalysisRequest("CL=F", direction, 100, stop, target));
+
+        AlternativeTrade alternative = analysis.Alternative.Should().NotBeNull().And.Subject.As<AlternativeTrade>();
+        alternative.Entry.Should().Be(analysis.Price);
+        TradeAnalysisValidator.Validate(new TradeAnalysisRequest("CL=F", alternative.Direction, alternative.Entry, alternative.StopLoss, alternative.TakeProfit)).Should().BeEmpty();
+        alternative.Score.Should().BeInRange(0, 100);
+        alternative.Reason.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Analyze_Alternative_FollowsTheModelDirectionOrKeepsTheUsers()
+    {
+        TradeAnalysis analysis = Analyze(new TradeAnalysisRequest("CL=F", TradeDirection.Sell, 100, 105, 90));
+
+        analysis.Alternative!.Direction.Should().Be(analysis.Model.Direction ?? TradeDirection.Sell);
+    }
+
+    [Fact]
+    public void LeverageSettings_ReturnsTheValueForEachAssetClass()
+    {
+        LeverageSettings leverage = new(Stock: 3, Etf: 4, Commodity: 7, Forex: 25, Crypto: 1, Index: 15);
+
+        leverage.For(AssetClass.Commodity).Should().Be(7);
+        leverage.For(AssetClass.Forex).Should().Be(25);
+        leverage.For(AssetClass.Index).Should().Be(15);
+    }
+
+    [Theory]
+    [InlineData(0.5, false)]
+    [InlineData(1, true)]
+    [InlineData(500, true)]
+    [InlineData(501, false)]
+    public void UserPreferencesValidator_ChecksTheLeverageRange(double commodity, bool valid) =>
+        UserPreferencesValidator.Validate(UserPreferences.Default with { Leverage = new LeverageSettings(Commodity: commodity) }).Any().Should().Be(!valid);
 
     [Fact]
     public void Analyze_ScoreStaysWithinBounds()

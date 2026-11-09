@@ -298,7 +298,9 @@
         {
             _drawingsJson = await Api.GetDrawingsAsync(Quote.Symbol, _cts.Token);
             _cryptoBasis = await Api.GetCryptoBasisAsync(_cts.Token);
-            _broker = (await Api.GetProfileAsync(_cts.Token)).Broker;
+            UserPreferences profile = await Api.GetProfileAsync(_cts.Token);
+            _broker = profile.Broker;
+            _leverage = profile.Leverage ?? new LeverageSettings();
             _candles = await Api.GetCandlesAsync(Quote.Symbol, _timeframe.Interval, _timeframe.Range, _cts.Token);
             _levels = await LoadLevelsAsync();
             RebuildLevels();

@@ -23,6 +23,17 @@ public sealed record AnalysisHistory(int Samples, double PositiveShare, double A
 
 public sealed record TradeContext(string Name, AssetClass AssetClass, MarketSnapshot Market, SentimentSnapshot Sentiment, ScoringOptions Scoring);
 
+public sealed record AlternativeTrade(
+    TradeDirection Direction,
+    double Entry,
+    double StopLoss,
+    double TakeProfit,
+    double RiskReward,
+    int Score,
+    string VerdictCode,
+    string Verdict,
+    string Reason);
+
 public sealed record TradeAnalysis(
     string Symbol,
     string Name,
@@ -42,4 +53,5 @@ public sealed record TradeAnalysis(
     SentimentSnapshot Sentiment,
     AnalysisHistory? History,
     IReadOnlyList<string> UpcomingEvents,
-    DateTimeOffset GeneratedAt);
+    DateTimeOffset GeneratedAt,
+    AlternativeTrade? Alternative = null);

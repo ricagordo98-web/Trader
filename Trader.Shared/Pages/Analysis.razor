@@ -3,7 +3,10 @@
 @using Trader.Core.Analysis
 @using Trader.Core.Scoring
 @implements IDisposable
+@using Trader.Shared.Components
 @inject TraderApiClient Api
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Análise · Trader</PageTitle>
 
@@ -82,6 +85,46 @@
                 </MudPaper>
 
                 <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Tamanho da posição e carteira</MudText>
+                    <div class="d-flex align-center flex-wrap gap-3 mb-2">
+                        <MudNumericField T="double" @bind-Value="_leverage" Label="Alavancagem (x)" Min="1" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Style="max-width:160px" />
+                        @if (NeedsFx)
+                        {
+                            <MudNumericField T="double" @bind-Value="_fx" Label="@($"1 {AssetCurrency} em {_account.Currency}")" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Style="max-width:200px" />
+                        }
+                        <MudText Typo="Typo.caption" Class="symbol-name">
+                            Conta de @_account.Capital.ToString("#,0", Pt) @_account.Currency, a arriscar @_account.RiskPercent.ToString("0.##", Pt)% por trade. Muda isto em Carteira e em Configurações.
+                        </MudText>
+                    </div>
+                    <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">@SizingText(_analysis.Entry, _analysis.StopLoss, _analysis.TakeProfit)</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.AccountBalanceWallet" Class="mt-2"
+                               OnClick="@(() => RegisterAsync(_analysis.Direction, _analysis.Entry, _analysis.StopLoss, _analysis.TakeProfit))">Registar na carteira</MudButton>
+                </MudPaper>
+
+                @if (_analysis.Alternative is { } alternative)
+                {
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                        <div class="d-flex align-center flex-wrap gap-3 mb-1">
+                            <MudText Typo="Typo.subtitle1">Alternativa segundo o modelo de predição</MudText>
+                            <MudChip T="string" Color="@VerdictColor(alternative.VerdictCode)" Variant="Variant.Filled" Size="Size.Small">@alternative.Verdict · @alternative.Score/100</MudChip>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mb-2">@alternative.Reason</MudText>
+                        <MudText Typo="Typo.body2">
+                            <strong>@(alternative.Direction == TradeDirection.Buy ? "Comprar" : "Vender")</strong> em @Price(alternative.Entry) · stop @Price(alternative.StopLoss) · alvo @Price(alternative.TakeProfit) · risco/retorno @alternative.RiskReward.ToString("0.##", Pt):1
+                        </MudText>
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">@SizingText(alternative.Entry, alternative.StopLoss, alternative.TakeProfit)</MudText>
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                            A pontuação da alternativa usa a mesma régua da tua trade, por isso são comparáveis. O modelo ainda não tem vantagem demonstrada: vê isto como uma segunda hipótese, não como uma recomendação.
+                        </MudText>
+                        <div class="d-flex gap-2 mt-2 flex-wrap">
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => UseAlternative(alternative))">Usar no formulário</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.AccountBalanceWallet"
+                                       OnClick="@(() => RegisterAsync(alternative.Direction, alternative.Entry, alternative.StopLoss, alternative.TakeProfit))">Registar na carteira</MudButton>
+                        </div>
+                    </MudPaper>
+                }
+
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
                     <MudText Typo="Typo.subtitle1" Class="mb-2">O que pesa na avaliação</MudText>
                     @foreach (AnalysisFinding finding in _analysis.Findings)
                     {
@@ -148,7 +191,7 @@
                     </MudText>
                 }
                 <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
-                    Limites: usa velas diárias e as notícias que o servidor guardou; o modelo ainda não tem vantagem demonstrada (ver Predição → Desempenho). Não considera custos da corretora nem o tamanho da posição.
+                    Limites: usa velas diárias e as notícias que o servidor guardou; o modelo ainda não tem vantagem demonstrada (ver Predição → Desempenho). A pontuação não considera custos da corretora; o tamanho da posição é só informativo.
                 </MudText>
             }
         </MudItem>
@@ -169,6 +212,28 @@
     private string? _error;
     private string? _loadError;
     private bool _busy;
+    private AccountProfile _account = new(10_000, 1, "EUR");
+    private LeverageSettings _leverageSettings = new();
+    private double _leverage = 5;
+    private double _fx = 1;
+
+    [SupplyParameterFromQuery] public string? Symbol { get; set; }
+
+    [SupplyParameterFromQuery] public string? Direction { get; set; }
+
+    [SupplyParameterFromQuery] public double? Entry { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sl")] public double? StopLoss { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tp")] public double? TakeProfit { get; set; }
+
+    private InstrumentQuote? AnalyzedQuote => _analysis is null ? null : _quotes.FirstOrDefault(q => q.Symbol == _analysis.Symbol);
+
+    private AssetClass AnalyzedClass => AnalyzedQuote?.AssetClass ?? AssetClass.Stock;
+
+    private string AssetCurrency => AnalyzedQuote?.Currency ?? _account.Currency;
+
+    private bool NeedsFx => !string.Equals(AssetCurrency, _account.Currency, StringComparison.OrdinalIgnoreCase);
 
     private double? CurrentPrice => _quotes.FirstOrDefault(q => q.Symbol == _symbol)?.Price;
 
@@ -179,6 +244,16 @@
         try
         {
             _quotes = await Api.GetInstrumentsAsync(_cts.Token, native: true);
+            _account = await Api.GetAccountAsync(_cts.Token);
+            _leverageSettings = (await Api.GetProfileAsync(_cts.Token)).Leverage ?? new LeverageSettings();
+
+            if (Symbol is not null && Entry is { } entry && StopLoss is { } stop && TakeProfit is { } target && _quotes.Any(q => q.Symbol == Symbol))
+            {
+                _symbol = Symbol;
+                _direction = Enum.TryParse(Direction, true, out TradeDirection direction) ? direction : stop < entry ? TradeDirection.Buy : TradeDirection.Sell;
+                (_entry, _stop, _target) = (entry, stop, target);
+                await AnalyzeAsync();
+            }
         }
         catch (HttpRequestException)
         {
@@ -224,6 +299,58 @@
         _target = _analysis.Model.Levels.TakeProfit;
     }
 
+    private void UseAlternative(AlternativeTrade alternative)
+    {
+        _direction = alternative.Direction;
+        _entry = alternative.Entry;
+        _stop = alternative.StopLoss;
+        _target = alternative.TakeProfit;
+    }
+
+    private PositionResult Sizing(double entry, double stop, double target) =>
+        PositionCalculator.Calculate(new PositionInput(_account.Capital, _account.RiskPercent, entry, stop, target, _leverage, _fx, AnalyzedClass));
+
+    private string SizingText(double entry, double stop, double target)
+    {
+        PositionResult sizing = Sizing(entry, stop, target);
+
+        if (!sizing.IsValid)
+        {
+            return string.Join(" ", sizing.Errors);
+        }
+
+        string text = $"A arriscar {Money(sizing.RiskAmount)}: {Quantity(sizing)} unidades, posição de {Money(sizing.Notional)}, margem de {Money(sizing.MarginRequired)} com {_leverage.ToString("0.##", Pt)}x.";
+
+        return sizing.Warnings.Count == 0 ? text : $"{text} {string.Join(" ", sizing.Warnings)}";
+    }
+
+    private string Money(double value) => $"{value.ToString("#,0.00", Pt)} {_account.Currency}";
+
+    private static double Quantity(PositionResult sizing) => sizing.WholeUnits >= 1 ? sizing.WholeUnits : Math.Round(sizing.Units, 4);
+
+    private async Task RegisterAsync(TradeDirection direction, double entry, double stop, double target)
+    {
+        if (_analysis is null)
+        {
+            return;
+        }
+
+        PositionResult sizing = Sizing(entry, stop, target);
+        TradePrefill prefill = new(_analysis.Symbol, direction, entry, stop, target, sizing.IsValid ? Quantity(sizing) : 0, _fx, null);
+        DialogParameters<TradeDialog> parameters = new()
+        {
+            { x => x.Prefill, prefill },
+            { x => x.Symbols, _quotes.Select(q => q.Symbol).ToList() }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<TradeDialog>("Registar trade", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+
+        if (!(await dialog.Result)?.Canceled ?? false)
+        {
+            Snackbar.Add("Trade registada na carteira.", Severity.Success);
+        }
+    }
+
     private async Task AnalyzeAsync()
     {
         if (string.IsNullOrEmpty(_symbol))
@@ -239,6 +366,8 @@
             (TradeAnalysis? analysis, string? error) = await Api.AnalyzeTradeAsync(new TradeAnalysisRequest(_symbol, _direction, _entry, _stop, _target), _cts.Token);
             _analysis = analysis;
             _error = error;
+            _fx = 1;
+            _leverage = _leverageSettings.For(AnalyzedClass);
         }
         catch (HttpRequestException)
         {

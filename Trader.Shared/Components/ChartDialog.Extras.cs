@@ -60,6 +60,7 @@ public partial class ChartDialog
     private bool _configApplied;
     private PlanState? _plan;
     private AccountProfile _account = new(10_000, 1, "EUR");
+    private LeverageSettings _leverage = new();
     private double? _alertLinePrice;
     private bool _replaying;
     private bool _replayPlaying;
@@ -71,7 +72,7 @@ public partial class ChartDialog
     private double Factor => Quote.DisplayFactor <= 0 ? 1 : Quote.DisplayFactor;
 
     private PositionResult? PlanResult => _plan is { } plan
-        ? PositionCalculator.Calculate(new PositionInput(_account.Capital, _account.RiskPercent, plan.Entry / Factor, plan.Stop / Factor, plan.Target / Factor, PositionCalculator.DefaultLeverage(Quote.AssetClass), 1, Quote.AssetClass))
+        ? PositionCalculator.Calculate(new PositionInput(_account.Capital, _account.RiskPercent, plan.Entry / Factor, plan.Stop / Factor, plan.Target / Factor, _leverage.For(Quote.AssetClass), 1, Quote.AssetClass))
         : null;
 
     private string PlanJournalLink => _plan is { } plan

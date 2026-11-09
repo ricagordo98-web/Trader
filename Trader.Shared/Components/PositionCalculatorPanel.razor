@@ -145,6 +145,8 @@
 
     [Parameter] public CostModel Costs { get; set; } = new();
 
+    [Parameter] public LeverageSettings Leverage { get; set; } = new();
+
     private double _maxDailyLoss;
     private int _maxTrades;
 
@@ -199,7 +201,7 @@
     private void SetAssetClass(AssetClass assetClass)
     {
         _assetClass = assetClass;
-        _leverage = PositionCalculator.DefaultLeverage(assetClass);
+        _leverage = Leverage.For(assetClass);
     }
 
     private void UseCurrentPrice()

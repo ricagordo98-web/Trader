@@ -199,7 +199,7 @@ public sealed class SuggestionService(
 
     public async Task<IReadOnlyList<SuggestionDto>> GetAsync(string? symbol, bool? open, int limit, SuggestionHorizon? horizon, CancellationToken cancellationToken, bool includeShadow = false)
     {
-        IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking();
+        IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking().Where(s => s.Variant != SuggestionVariants.Projection);
 
         if (!includeShadow)
         {
@@ -289,7 +289,7 @@ public sealed class SuggestionService(
 
         var closed = await dbContext.Suggestions
             .AsNoTracking()
-            .Where(s => s.Status != SuggestionStatus.Open && s.RMultiple != null)
+            .Where(s => s.Status != SuggestionStatus.Open && s.RMultiple != null && s.Variant != SuggestionVariants.Projection)
             .Select(s => new { s.EvidenceJson, R = s.RMultiple!.Value })
             .ToListAsync(cancellationToken);
 
@@ -327,7 +327,7 @@ public sealed class SuggestionService(
 
         List<Suggestion> closed = await dbContext.Suggestions
             .AsNoTracking()
-            .Where(s => s.Horizon == horizon && s.Status != SuggestionStatus.Open && s.RMultiple != null)
+            .Where(s => s.Horizon == horizon && s.Status != SuggestionStatus.Open && s.RMultiple != null && s.Variant != SuggestionVariants.Projection)
             .ToListAsync(cancellationToken);
 
         Dictionary<string, AssetClass> classes = await dbContext.Instruments.AsNoTracking().ToDictionaryAsync(i => i.Symbol, i => i.AssetClass, cancellationToken);

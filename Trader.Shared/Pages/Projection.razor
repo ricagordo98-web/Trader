@@ -1,0 +1,283 @@
+@page "/projection"
+@using System.Globalization
+@using Trader.Core.Projection
+@implements IDisposable
+@inject TraderApiClient Api
+@inject ThemeState Theme
+
+<PageTitle>Projeção · Trader</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6 page-fade">
+    <MudText Typo="Typo.h4" Class="mb-1">Projeção de preço</MudText>
+    <MudText Typo="Typo.body2" Class="symbol-name mb-4">
+        Desenha o cenário mais provável para as próximas horas de um ativo, em velas de 5 minutos, com as bandas onde o preço deve ficar. Não é uma previsão certa: o preço de curto prazo é sobretudo ruído, por isso a parte útil é a largura das bandas e o quanto elas acertaram no passado deste ativo.
+    </MudText>
+
+    @if (_loadError is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+    }
+
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <div class="d-flex align-center flex-wrap gap-3">
+            <MudAutocomplete T="string" Label="Ativo" SearchFunc="SearchInstruments" ValueChanged="OnSymbolChanged" Value="_symbol" Style="min-width:260px"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" OpenOnFocus="true" MaxItems="40" SelectOnActivation="true">
+                <ItemTemplate Context="symbol">
+                    <span>@symbol · @InstrumentName(symbol)</span>
+                </ItemTemplate>
+            </MudAutocomplete>
+            <MudSelect T="int" @bind-Value="_horizon" Label="Horizonte" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px">
+                @foreach (int minutes in Horizons)
+                {
+                    <MudSelectItem Value="minutes">@HorizonLabel(minutes)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Timeline" OnClick="ProjectAsync" Disabled="@(_busy || string.IsNullOrEmpty(_symbol))">Projetar</MudButton>
+        </div>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+        }
+    </MudPaper>
+
+    @if (_busy)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+        <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">A simular milhares de caminhos e a medir o acerto passado…</MudText>
+    }
+
+    <MudPaper Elevation="0" Outlined="true" Class="mb-4" Style="position:relative;height:520px;overflow:hidden">
+        <KLineChart Symbol="@(_symbol ?? string.Empty)" Dark="Theme.IsDark" ShowVolume="false" @ref="_chart" />
+        @if (_projection is null && !_busy)
+        {
+            <div class="d-flex align-center justify-center" style="position:absolute;inset:0;pointer-events:none">
+                <MudText Color="Color.Secondary">Escolhe um ativo e carrega em Projetar.</MudText>
+            </div>
+        }
+    </MudPaper>
+
+    @if (_projection is { } projection)
+    {
+        ProjectionResult result = projection.Result;
+        ProjectionBand end = result.Bands[^1];
+
+        foreach (string warning in projection.Warnings)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@warning</MudAlert>
+        }
+
+        <MudText Typo="Typo.caption" Class="symbol-name d-block mb-3">
+            À esquerda da linha tracejada estão as velas reais; à direita, o cenário mediano projetado (velas) e as linhas laranja tracejadas, que são as bandas de 50% e de 80%. Preços em @projection.Currency, na moeda do ativo.
+        </MudText>
+
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100">
+                    <MudText Typo="Typo.caption" Class="symbol-name">Preço agora</MudText>
+                    <MudText Typo="Typo.h6">@Price(result.LastPrice)</MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name">@result.LastTime.ToLocalTime().ToString("dd/MM HH:mm", Pt)</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100">
+                    <MudText Typo="Typo.caption" Class="symbol-name">Cenário mediano em @HorizonLabel(result.HorizonMinutes)</MudText>
+                    <MudText Typo="Typo.h6">@Price(end.P50)</MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name">@result.ExpectedMovePercent.ToString("+0.00;-0.00;0.00", Pt)%</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100">
+                    <MudText Typo="Typo.caption" Class="symbol-name">80% dos caminhos acabam entre</MudText>
+                    <MudText Typo="Typo.h6">@Price(end.P10) – @Price(end.P90)</MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name">±@result.OneSigmaPercent.ToString("0.##", Pt)% a 1 desvio-padrão</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100">
+                    <MudText Typo="Typo.caption" Class="symbol-name">Probabilidade de estar acima</MudText>
+                    <MudText Typo="Typo.h6">@((result.ProbabilityUp * 100).ToString("0", Pt))%</MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name">perto de 50% = sem direção clara</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        if (result.Plan is { } plan)
+        {
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                <div class="d-flex align-center flex-wrap gap-3 mb-1">
+                    <MudText Typo="Typo.subtitle1">Alvos desta projeção</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(plan.Direction == TradeDirection.Buy ? Color.Success : Color.Error)" Variant="Variant.Filled">@(plan.Direction == TradeDirection.Buy ? "Compra" : "Venda")</MudChip>
+                </div>
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    Entrada @Price(plan.Entry) · stop @Price(plan.StopLoss) · alvo @Price(plan.TakeProfit) · risco/retorno @plan.RiskReward.ToString("0.##", Pt):1. O alvo e o stop estão a 0,67 desvios do preço atual (a largura da banda de 50%) e a direção é a do lado mais provável.
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    Nas simulações: <strong>@((plan.ProbabilityTarget * 100).ToString("0", Pt))%</strong> chegam ao alvo antes do stop, <strong>@((plan.ProbabilityStop * 100).ToString("0", Pt))%</strong> ao stop primeiro e @((plan.ProbabilityExpire * 100).ToString("0", Pt))% acabam o tempo sem tocar em nenhum. Resultado esperado: @plan.ExpectedR.ToString("+0.00;-0.00;0.00", Pt) R (antes de custos).
+                </MudText>
+                @if (projection.TrackedSuggestionId is not null)
+                {
+                    <MudText Typo="Typo.caption" Class="symbol-name d-block">
+                        @(projection.AlreadyTracked ? "Já há uma projeção deste ativo em avaliação" : "Registada para avaliação"): o servidor compara estes alvos com o preço real e o resultado entra em Predição → Fiabilidade (variante "Projeção"), sem aparecer nas tuas sugestões.
+                    </MudText>
+                }
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.FactCheck" Class="mt-1" Href="@AnalysisLink(projection, plan)">Analisar esta trade</MudButton>
+            </MudPaper>
+        }
+
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">Quanto é que isto acertou no passado deste ativo</MudText>
+            @if (projection.Calibration is { } calibration)
+            {
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    Repeti a projeção em @calibration.Origins momentos passados (só com os dados que existiam nessa altura) e comparei com o preço que realmente apareceu @HorizonLabel(result.HorizonMinutes) depois.
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    A banda de 80% apanhou o preço real em <strong>@((calibration.Coverage80 * 100).ToString("0", Pt))%</strong> dos casos (ideal: 80%) e a de 50% em <strong>@((calibration.Coverage50 * 100).ToString("0", Pt))%</strong> (ideal: 50%).
+                    @if (calibration.DirectionHit is { } hit)
+                    {
+                        <span> A direção do cenário mediano acertou em <strong>@((hit * 100).ToString("0", Pt))%</strong> de @calibration.DirectionSamples casos (50% = moeda ao ar).</span>
+                    }
+                </MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                    Cobertura muito abaixo do ideal quer dizer que as bandas estão estreitas demais para este ativo; muito acima, largas demais. Com poucos casos, o número é só indicativo.
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="symbol-name">Não há histórico suficiente para medir o acerto passado deste ativo.</MudText>
+            }
+        </MudPaper>
+
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">A lógica por trás do desenho</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2">
+                O motor tem quatro passos, todos técnicas conhecidas:
+            </MudText>
+            <MudList T="string" Dense="true" Class="pa-0 mb-2">
+                <MudListItem><strong>1. Volatilidade (EWMA).</strong> Mede o quanto o preço mexe por vela de 5 minutos, dando mais peso ao passado recente (modelo RiskMetrics, λ=0,94), e faz essa volatilidade regressar à média ao longo do horizonte.</MudListItem>
+                <MudListItem><strong>2. Hora do dia.</strong> A volatilidade intradiária tem forma de U (forte na abertura e no fecho). O motor mede-a nas últimas sessões e aplica-a às horas que vão ser projetadas.</MudListItem>
+                <MudListItem><strong>3. Deriva pequena.</strong> Um empurrão leve de momentum e uma força de reversão à VWAP, ambos limitados para nunca dominarem o ruído.</MudListItem>
+                <MudListItem><strong>4. Monte Carlo com simulação histórica filtrada.</strong> Gera 2000 caminhos reamostrando choques reais do próprio ativo (por isso com caudas gordas). A mediana de cada instante forma as velas; os percentis 10, 25, 75 e 90 formam as bandas.</MudListItem>
+            </MudList>
+            @foreach (ProjectionDriver driver in result.Drivers)
+            {
+                <div class="d-flex gap-3 py-2" style="border-top:1px solid var(--mud-palette-divider)">
+                    <div class="flex-grow-1">
+                        <MudText Typo="Typo.body2"><strong>@driver.Name</strong></MudText>
+                        <MudText Typo="Typo.caption" Class="symbol-name">@driver.Detail</MudText>
+                    </div>
+                    @if (driver.EffectPercent is { } effect)
+                    {
+                        <MudText Typo="Typo.body2">@effect.ToString("+0.000;-0.000;0.000", Pt)%</MudText>
+                    }
+                </div>
+            }
+            <MudText Typo="Typo.caption" Class="symbol-name d-block mt-2">
+                Limites: as velas são o cenário <em>mediano</em>, por isso são mais calmas do que as reais (o ruído está nas bandas). Não prevê notícias, resultados nem saltos de abertura. Os parâmetros da deriva são heurísticas, não foram otimizados. Não é aconselhamento financeiro.
+            </MudText>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+    private static readonly int[] Horizons = [30, 60, 120, 240];
+
+    private readonly CancellationTokenSource _cts = new();
+    private IReadOnlyList<InstrumentQuote> _quotes = [];
+    private KLineChart? _chart;
+    private PriceProjection? _projection;
+    private string? _symbol;
+    private string _chartKind = ChartKinds.Candles;
+    private int _horizon = 120;
+    private string? _error;
+    private string? _loadError;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _quotes = await Api.GetInstrumentsAsync(_cts.Token);
+            _chartKind = (await Api.GetProfileAsync(_cts.Token)).ProjectionChartKind;
+        }
+        catch (HttpRequestException)
+        {
+            _loadError = "Não foi possível carregar os ativos. Verifica se o servidor está a correr.";
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchInstruments(string value, CancellationToken cancellationToken) =>
+        Task.FromResult(_quotes
+            .Where(q => string.IsNullOrWhiteSpace(value)
+                || q.Symbol.Contains(value, StringComparison.OrdinalIgnoreCase)
+                || q.Name.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(q => q.Symbol.StartsWith(value ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Symbol));
+
+    private string InstrumentName(string symbol) => _quotes.FirstOrDefault(q => q.Symbol == symbol)?.Name ?? string.Empty;
+
+    private void OnSymbolChanged(string? symbol)
+    {
+        _symbol = symbol;
+        _error = null;
+    }
+
+    private async Task ProjectAsync()
+    {
+        if (string.IsNullOrEmpty(_symbol) || _chart is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            (PriceProjection? projection, string? error) = await Api.GetProjectionAsync(_symbol, _horizon, _cts.Token);
+            _projection = projection;
+            _error = error;
+
+            if (projection is not null)
+            {
+                await _chart.SetProjectionAsync(_chartKind, projection.History, projection.Result.Bars, projection.Result.Bands, PlanLevels(projection.Result.Plan));
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível contactar o servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static IReadOnlyList<ChartLevel> PlanLevels(ProjectionPlan? plan) => plan is null
+        ? []
+        :
+        [
+            new ChartLevel("Entrada", plan.Entry, "#94A3B8"),
+            new ChartLevel("Stop", plan.StopLoss, "#EF4444"),
+            new ChartLevel("Alvo", plan.TakeProfit, "#22C55E")
+        ];
+
+    private static string AnalysisLink(PriceProjection projection, ProjectionPlan plan) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"/analysis?symbol={Uri.EscapeDataString(projection.Symbol)}&direction={plan.Direction}&entry={plan.Entry:R}&sl={plan.StopLoss:R}&tp={plan.TakeProfit:R}");
+
+    private static string HorizonLabel(int minutes) => minutes >= 60 ? $"{(minutes / 60.0).ToString("0.#", Pt)} h" : $"{minutes} min";
+
+    private static string Price(double value) => value.ToString(value >= 100 ? "0.##" : "0.#####", Pt);
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
