@@ -1,4 +1,5 @@
 using Trader.Infrastructure.Agender;
+using Trader.Infrastructure.Analysis;
 using Trader.Infrastructure.Alerts;
 using Trader.Infrastructure.Backup;
 using Trader.Infrastructure.Calendar;
@@ -86,6 +87,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<AgenderSyncState>();
         services.AddHttpClient(AgenderSyncService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddScoped<IAgenderSync, AgenderSyncService>();
+        services.AddScoped<ITradeAnalysisService, TradeAnalysisService>();
         services.AddHostedService<AgenderSyncWorker>();
         services.AddHttpClient<IAlertPublisher, NtfyPublisher>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IInstrumentService, InstrumentService>();

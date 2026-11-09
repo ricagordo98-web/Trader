@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Trader.Core.Agender;
+using Trader.Core.Analysis;
 using Trader.Core.Alerts;
 using Trader.Core.Backtesting;
 using Trader.Core.Charts;
@@ -117,6 +118,15 @@ public sealed class TraderApiClient(HttpClient httpClient)
     {
         using HttpResponseMessage response = await httpClient.DeleteAsync("api/agender", cancellationToken);
         return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<(TradeAnalysis? Analysis, string? Error)> AnalyzeTradeAsync(TradeAnalysisRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/analysis", request, cancellationToken);
+
+        return response.IsSuccessStatusCode
+            ? (await response.Content.ReadFromJsonAsync<TradeAnalysis>(cancellationToken), null)
+            : (null, await ApiError.ReadAsync(response));
     }
 
     public async Task<AgenderStatus> SyncAgenderAsync(CancellationToken cancellationToken = default)

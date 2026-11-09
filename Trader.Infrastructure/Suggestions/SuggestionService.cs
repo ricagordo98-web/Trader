@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Trader.Core.Abstractions;
 using Trader.Core.Alerts;
+using Trader.Core.Analysis;
 using Trader.Core.Backtesting;
 using Trader.Core.Calendar;
 using Trader.Core.Intraday;
@@ -30,6 +31,40 @@ public sealed class SuggestionService(
     private static readonly TimeSpan CalibrationCacheDuration = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan DailyTrendCacheDuration = TimeSpan.FromHours(6);
     private static readonly TimeSpan SwingNewsWindow = TimeSpan.FromDays(30);
+
+    public async Task<TradeContext?> GetContextAsync(string symbol, CancellationToken cancellationToken)
+    {
+        Instrument? instrument = await dbContext.Instruments.AsNoTracking().FirstOrDefaultAsync(i => i.Symbol == symbol, cancellationToken);
+
+        if (instrument is null)
+        {
+            return null;
+        }
+
+        ScoringOptions scoring = await scoringSettings.GetAsync(cancellationToken);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        IReadOnlyList<Candle> candles = await marketData.GetCandlesAsync(symbol, "1d", "1y", cancellationToken);
+        IndicatorSeries series = IndicatorCalculator.ComputeSeries(symbol, instrument.Name, candles);
+
+        if (series.Snapshots.LastOrDefault() is not { } market)
+        {
+            return null;
+        }
+
+        PriceLookup? benchmark = await GetBenchmarkAsync(instrument, [], cancellationToken);
+        IReadOnlyDictionary<string, int> earnings = await GetEarningsAsync(now, cancellationToken);
+
+        market = market with
+        {
+            RelativeStrength = benchmark is null ? null : ContextMetrics.RelativeStrength(series.Candles, series.Candles.Count - 1, benchmark),
+            DaysToEarnings = earnings.TryGetValue(symbol, out int days) ? days : null,
+            Vix = await GetVixAsync(cancellationToken)
+        };
+
+        SentimentSnapshot sentiment = await BuildSentimentAsync(symbol, now, scoring, SwingNewsWindow, cancellationToken);
+
+        return new TradeContext(instrument.Name, instrument.AssetClass, market, sentiment, scoring);
+    }
 
     public async Task<int> RefreshAsync(CancellationToken cancellationToken)
     {

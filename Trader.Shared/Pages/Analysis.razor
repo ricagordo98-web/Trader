@@ -1,0 +1,296 @@
+@page "/analysis"
+@using System.Globalization
+@using Trader.Core.Analysis
+@using Trader.Core.Scoring
+@implements IDisposable
+@inject TraderApiClient Api
+
+<PageTitle>Análise · Trader</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6 page-fade">
+    <MudText Typo="Typo.h4" Class="mb-1">Análise de trade</MudText>
+    <MudText Typo="Typo.body2" Class="symbol-name mb-4">
+        Diz o que vais fazer (ativo, direção, entrada, stop loss e take profit) e eu digo-te se está bem montado: risco/retorno, stop e alvo face à volatilidade, tendência, sentimento das notícias e o que o modelo de predição vê. É uma segunda opinião, não aconselhamento financeiro.
+    </MudText>
+
+    @if (_loadError is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+    }
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" lg="4">
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-3">A tua trade</MudText>
+                <MudAutocomplete T="string" Label="Ativo" SearchFunc="SearchInstruments" ValueChanged="OnSymbolChanged" Value="_symbol"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" OpenOnFocus="true" MaxItems="40" SelectOnActivation="true">
+                    <ItemTemplate Context="symbol">
+                        <span>@symbol · @InstrumentName(symbol)</span>
+                    </ItemTemplate>
+                </MudAutocomplete>
+                <MudToggleGroup T="TradeDirection" @bind-Value="_direction" SelectionMode="SelectionMode.SingleSelection" Size="Size.Small" Color="Color.Primary" Class="mb-3">
+                    <MudToggleItem Value="TradeDirection.Buy" Text="Comprar" />
+                    <MudToggleItem Value="TradeDirection.Sell" Text="Vender" />
+                </MudToggleGroup>
+                <MudNumericField T="double" @bind-Value="_entry" Label="Preço de entrada" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-2" />
+                <MudGrid Spacing="2">
+                    <MudItem xs="6"><MudNumericField T="double" @bind-Value="_stop" Label="Stop loss" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+                    <MudItem xs="6"><MudNumericField T="double" @bind-Value="_target" Label="Take profit" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+                </MudGrid>
+                <MudText Typo="Typo.caption" Class="symbol-name d-block mt-2">
+                    Preço do ativo agora: @CurrentPriceLabel (cotação do Yahoo, que pode ter atraso). Usa os preços do teu mercado, em moeda do ativo.
+                </MudText>
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck" OnClick="AnalyzeAsync" Disabled="@(_busy || string.IsNullOrEmpty(_symbol))">Analisar</MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="UseCurrentPrice" Disabled="@(CurrentPrice is null)">Entrar ao preço atual</MudButton>
+                </div>
+                @if (_error is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="8">
+            @if (_busy)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Class="symbol-name">A recolher preços, notícias e sinais do modelo…</MudText>
+            }
+            else if (_analysis is null)
+            {
+                <MudPaper Elevation="0" Outlined="true" Class="pa-8 text-center">
+                    <MudText Typo="Typo.h6" Class="mb-2">Ainda sem análise</MudText>
+                    <MudText Color="Color.Secondary">Escolhe o ativo, preenche entrada, stop e alvo e carrega em Analisar.</MudText>
+                </MudPaper>
+            }
+            else
+            {
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                    <div class="d-flex align-center flex-wrap gap-3 mb-2">
+                        <MudText Typo="Typo.h5">@_analysis.Symbol · @_analysis.Name</MudText>
+                        <MudChip T="string" Color="@VerdictColor(_analysis.VerdictCode)" Variant="Variant.Filled" Size="Size.Large">@_analysis.Verdict · @_analysis.Score/100</MudChip>
+                    </div>
+                    <MudProgressLinear Value="_analysis.Score" Max="100" Color="@VerdictColor(_analysis.VerdictCode)" Class="mb-3" />
+                    <MudText Typo="Typo.body1" Class="mb-2">@_analysis.Summary</MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name">
+                        @(_analysis.Direction == TradeDirection.Buy ? "Compra" : "Venda") em @Price(_analysis.Entry) · stop @Price(_analysis.StopLoss) · alvo @Price(_analysis.TakeProfit) · risco/retorno @_analysis.RiskReward.ToString("0.##", Pt):1 · preço agora @Price(_analysis.Price) · ATR diário @Price(_analysis.Atr)
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                        A pontuação soma pontos por cada ponto abaixo (começa em 50). É uma regra de bom senso, não uma probabilidade de ganhar.
+                    </MudText>
+                </MudPaper>
+
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">O que pesa na avaliação</MudText>
+                    @foreach (AnalysisFinding finding in _analysis.Findings)
+                    {
+                        <div class="d-flex gap-3 py-2" style="border-top:1px solid var(--mud-palette-divider)">
+                            <MudIcon Icon="@FindingIcon(finding.Kind)" Color="@FindingColor(finding.Kind)" Size="Size.Small" Class="mt-1" />
+                            <div class="flex-grow-1">
+                                <MudText Typo="Typo.body2"><strong>@finding.Title</strong> <span class="symbol-name">· @finding.Category</span></MudText>
+                                <MudText Typo="Typo.caption" Class="symbol-name">@finding.Detail</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Color="@FindingColor(finding.Kind)">@(finding.Points > 0 ? "+" : string.Empty)@finding.Points</MudText>
+                        </div>
+                    }
+                </MudPaper>
+
+                <MudGrid Spacing="4" Class="mb-4">
+                    <MudItem xs="12" md="6">
+                        <MudPaper Elevation="0" Outlined="true" Class="pa-4 h-100">
+                            <MudText Typo="Typo.subtitle1" Class="mb-1">O que o modelo faria</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2">
+                                @ModelText(_analysis.Model)
+                            </MudText>
+                            @foreach (SignalResult signal in _analysis.Model.Signals)
+                            {
+                                <div class="d-flex justify-space-between py-1">
+                                    <MudText Typo="Typo.caption">@signal.Label · @signal.Detail</MudText>
+                                    <MudText Typo="Typo.caption" Color="@(AgreesWithTrade(signal) ? Color.Success : Color.Error)">@(AgreesWithTrade(signal) ? "a favor" : "contra")</MudText>
+                                </div>
+                            }
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.caption" Class="symbol-name">
+                                Níveis do modelo para esta direção, entrando ao preço atual: stop @Price(_analysis.Model.Levels.StopLoss), alvo @Price(_analysis.Model.Levels.TakeProfit), risco/retorno @_analysis.Model.Levels.RiskReward.ToString("0.##", Pt):1.
+                            </MudText>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="UseModelLevels">Usar estes níveis</MudButton>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudPaper Elevation="0" Outlined="true" Class="pa-4 h-100">
+                            <MudText Typo="Typo.subtitle1" Class="mb-1">Sentimento e notícias</MudText>
+                            @if (_analysis.Sentiment.ArticleCount == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="symbol-name">Não há notícias guardadas sobre este ativo nos últimos 30 dias.</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-2">
+                                    Sentimento @_analysis.Sentiment.WeightedSentiment.ToString("+0.00;-0.00", CultureInfo.InvariantCulture) em @_analysis.Sentiment.ArticleCount artigos (de -1 muito negativo a +1 muito positivo).
+                                </MudText>
+                                @foreach (EvidenceArticle article in _analysis.Sentiment.Articles.OrderByDescending(a => a.Influence).Take(6))
+                                {
+                                    <div class="py-1">
+                                        <MudLink Href="@article.Url" Target="_blank" Typo="Typo.caption">@article.Title</MudLink>
+                                        <MudText Typo="Typo.caption" Class="symbol-name">@article.Source · @article.PublishedAt.ToLocalTime().ToString("dd/MM HH:mm", Pt) · @article.Sentiment.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)</MudText>
+                                    </div>
+                                }
+                            }
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                @if (_analysis.History is { } history && history.Samples > 0)
+                {
+                    <MudText Typo="Typo.caption" Class="symbol-name d-block">
+                        Contexto: @history.Samples sugestões fechadas do modelo para este tipo de ativo e direção (@history.Scope), @((history.PositiveShare * 100).ToString("0", Pt))% com ganho, R médio @history.AverageR.ToString("+0.00;-0.00", CultureInfo.InvariantCulture).
+                    </MudText>
+                }
+                <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                    Limites: usa velas diárias e as notícias que o servidor guardou; o modelo ainda não tem vantagem demonstrada (ver Predição → Desempenho). Não considera custos da corretora nem o tamanho da posição.
+                </MudText>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private readonly CancellationTokenSource _cts = new();
+    private IReadOnlyList<InstrumentQuote> _quotes = [];
+    private string? _symbol;
+    private TradeDirection _direction = TradeDirection.Buy;
+    private double _entry;
+    private double _stop;
+    private double _target;
+    private TradeAnalysis? _analysis;
+    private string? _error;
+    private string? _loadError;
+    private bool _busy;
+
+    private double? CurrentPrice => _quotes.FirstOrDefault(q => q.Symbol == _symbol)?.Price;
+
+    private string CurrentPriceLabel => CurrentPrice is { } price ? Price(price) : "—";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _quotes = await Api.GetInstrumentsAsync(_cts.Token, native: true);
+        }
+        catch (HttpRequestException)
+        {
+            _loadError = "Não foi possível carregar os ativos. Verifica se o servidor está a correr.";
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchInstruments(string value, CancellationToken cancellationToken) =>
+        Task.FromResult(_quotes
+            .Where(q => string.IsNullOrWhiteSpace(value)
+                || q.Symbol.Contains(value, StringComparison.OrdinalIgnoreCase)
+                || q.Name.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(q => q.Symbol.StartsWith(value ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Symbol));
+
+    private string InstrumentName(string symbol) => _quotes.FirstOrDefault(q => q.Symbol == symbol)?.Name ?? string.Empty;
+
+    private void OnSymbolChanged(string? symbol)
+    {
+        _symbol = symbol;
+        _analysis = null;
+        _error = null;
+        _entry = _stop = _target = 0;
+    }
+
+    private void UseCurrentPrice()
+    {
+        if (CurrentPrice is { } price)
+        {
+            _entry = price;
+        }
+    }
+
+    private void UseModelLevels()
+    {
+        if (_analysis is null)
+        {
+            return;
+        }
+
+        _entry = _analysis.Model.Levels.Entry;
+        _stop = _analysis.Model.Levels.StopLoss;
+        _target = _analysis.Model.Levels.TakeProfit;
+    }
+
+    private async Task AnalyzeAsync()
+    {
+        if (string.IsNullOrEmpty(_symbol))
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            (TradeAnalysis? analysis, string? error) = await Api.AnalyzeTradeAsync(new TradeAnalysisRequest(_symbol, _direction, _entry, _stop, _target), _cts.Token);
+            _analysis = analysis;
+            _error = error;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível contactar o servidor.";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private bool AgreesWithTrade(SignalResult signal) => signal.Value * (_analysis!.Direction == TradeDirection.Buy ? 1 : -1) >= 0;
+
+    private static string ModelText(ModelView model) => model.Direction switch
+    {
+        TradeDirection.Buy => $"Inclina-se para comprar (pontuação {model.Score.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)}).",
+        TradeDirection.Sell => $"Inclina-se para vender (pontuação {model.Score.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)}).",
+        _ => $"Não vê direção clara (pontuação {model.Score.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)})."
+    };
+
+    private static Color VerdictColor(string code) => code switch
+    {
+        "good" => Color.Success,
+        "acceptable" => Color.Info,
+        "weak" => Color.Warning,
+        _ => Color.Error
+    };
+
+    private static Color FindingColor(FindingKind kind) => kind switch
+    {
+        FindingKind.Positive => Color.Success,
+        FindingKind.Warning => Color.Warning,
+        FindingKind.Negative => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string FindingIcon(FindingKind kind) => kind switch
+    {
+        FindingKind.Positive => Icons.Material.Filled.CheckCircle,
+        FindingKind.Warning => Icons.Material.Filled.Warning,
+        FindingKind.Negative => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private static string Price(double value) => value.ToString("0.#####", Pt);
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

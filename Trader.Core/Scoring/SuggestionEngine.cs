@@ -15,6 +15,14 @@ public sealed class SuggestionEngine(ScoringOptions options)
         return draft is { IsShadow: false } ? draft : null;
     }
 
+    public (IReadOnlyList<SignalResult> Signals, double Score) ScoreSignals(MarketSnapshot market, SentimentSnapshot sentiment)
+    {
+        List<SignalResult> signals = BuildSignals(market, sentiment);
+        double totalWeight = signals.Sum(s => s.Weight);
+
+        return (signals, totalWeight > 0 ? signals.Sum(s => s.Weight * s.Value) / totalWeight : 0);
+    }
+
     public SuggestionDraft? Assess(MarketSnapshot market, SentimentSnapshot sentiment)
     {
         if (market.Atr <= 0 || market.Price <= 0)
