@@ -974,6 +974,84 @@ namespace Trader.Infrastructure.Persistence.Migrations
                     b.ToTable("Suggestions");
                 });
 
+            modelBuilder.Entity("Trader.Core.Projection.ProjectionRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("ActualPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HorizonMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("LastPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("OneSigmaPercent")
+                        .HasColumnType("REAL");
+
+                    b.Property<long>("OriginTime")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("P10")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("P25")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("P75")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("P90")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PlanDirection")
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("PlanStop")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("PlanTarget")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("ProjectedMedian")
+                        .HasColumnType("REAL");
+
+                    b.Property<long?>("ResolvedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("SuggestionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TargetTime")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Symbol", "TargetTime", "HorizonMinutes")
+                        .IsUnique();
+
+                    b.ToTable("ProjectionRecords");
+                });
+
             modelBuilder.Entity("Trader.Core.Simulator.PaperTrade", b =>
                 {
                     b.Property<long>("Id")

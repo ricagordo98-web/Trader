@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Trader.Core.Journal;
 using Trader.Core.Models;
+using Trader.Core.Projection;
 using Trader.Core.Simulator;
 
 namespace Trader.Infrastructure.Persistence;
@@ -21,6 +22,7 @@ public sealed class TraderDbContext(DbContextOptions<TraderDbContext> options) :
     public DbSet<JournalTrade> JournalTrades => Set<JournalTrade>();
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<PriceAlert> PriceAlerts => Set<PriceAlert>();
+    public DbSet<ProjectionRecord> ProjectionRecords => Set<ProjectionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -130,6 +132,19 @@ public sealed class TraderDbContext(DbContextOptions<TraderDbContext> options) :
             entity.Property(a => a.Condition).HasConversion<string>().HasMaxLength(8);
             entity.Property(a => a.CreatedAt).HasConversion(utcTicks);
             entity.Property(a => a.TriggeredAt).HasConversion(utcTicks);
+        });
+
+        modelBuilder.Entity<ProjectionRecord>(entity =>
+        {
+            entity.HasIndex(r => r.CreatedAt);
+            entity.HasIndex(r => new { r.Symbol, r.TargetTime, r.HorizonMinutes }).IsUnique();
+            entity.Property(r => r.Symbol).HasMaxLength(32).IsRequired();
+            entity.Property(r => r.Name).HasMaxLength(128).IsRequired();
+            entity.Property(r => r.PlanDirection).HasConversion<string>().HasMaxLength(8);
+            entity.Property(r => r.CreatedAt).HasConversion(utcTicks);
+            entity.Property(r => r.OriginTime).HasConversion(utcTicks);
+            entity.Property(r => r.TargetTime).HasConversion(utcTicks);
+            entity.Property(r => r.ResolvedAt).HasConversion(utcTicks);
         });
 
         modelBuilder.Entity<Alert>(entity =>

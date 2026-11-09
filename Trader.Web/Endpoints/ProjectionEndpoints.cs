@@ -26,6 +26,21 @@ public static class ProjectionEndpoints
                 : Results.Ok(projection);
         }).RequireAuthorization();
 
+        app.MapPost("/api/projection-records", async (RegisterProjectionRequest request, IProjectionRecordService service, CancellationToken cancellationToken) =>
+        {
+            (ProjectionRecordDto? record, IReadOnlyList<string> errors) = await service.RegisterAsync(request, cancellationToken);
+
+            return record is null
+                ? Results.Problem(title: string.Join(" ", errors), statusCode: StatusCodes.Status400BadRequest)
+                : Results.Ok(record);
+        }).RequireAuthorization();
+
+        app.MapGet("/api/projection-records", async (IProjectionRecordService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListAsync(cancellationToken))).RequireAuthorization();
+
+        app.MapDelete("/api/projection-records/{id:long}", async (long id, IProjectionRecordService service, CancellationToken cancellationToken) =>
+            await service.DeleteAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound()).RequireAuthorization();
+
         return app;
     }
 }

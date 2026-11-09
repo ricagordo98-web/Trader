@@ -4,6 +4,7 @@
 @implements IDisposable
 @inject TraderApiClient Api
 @inject ThemeState Theme
+@inject ISnackbar Snackbar
 
 <PageTitle>Projeção · Trader</PageTitle>
 
@@ -101,6 +102,18 @@
             </MudItem>
         </MudGrid>
 
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+            <div class="d-flex align-center flex-wrap gap-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.BookmarkAdd" OnClick="RegisterAsync"
+                           Disabled="@(_registering || !projection.MarketOpen || _registeredKey == RegistrationKey(projection))">Registar esta projeção</MudButton>
+                <MudText Typo="Typo.caption" Class="symbol-name">
+                    @(_registeredKey == RegistrationKey(projection)
+                        ? "Registada. Passado o horizonte, a diferença para o preço real aparece em Projeções registadas, mais abaixo."
+                        : $"Guarda o cenário previsto para as {result.LastTime.AddMinutes(result.HorizonMinutes).ToLocalTime().ToString("HH:mm", Pt)}. Passado esse momento, a app compara com o preço real e mostra a diferença, positiva ou negativa.")
+                </MudText>
+            </div>
+        </MudPaper>
+
         if (result.Plan is { } plan)
         {
             <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
@@ -177,6 +190,67 @@
             </MudText>
         </MudPaper>
     }
+
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <div class="d-flex align-center flex-wrap gap-3 mb-1">
+            <MudText Typo="Typo.subtitle1">Projeções registadas</MudText>
+            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadRecordsAsync">Atualizar</MudButton>
+        </div>
+        <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">
+            Diferença = preço real menos o previsto no fim do horizonte. Positiva: o preço ficou acima do cenário mediano; negativa: abaixo. "Banda" diz se o preço real caiu dentro das bandas de 50% ou de 80%. "Face ao alvo" é a distância ao alvo do plano (positiva = passou o alvo a favor da direção).
+        </MudText>
+        @if (_records.Summary is { } summary)
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">
+                Em @summary.Count projeções já comparadas: erro médio <strong>@Signed(summary.BiasPercent)%</strong> (viés; perto de 0 é bom), erro absoluto médio @summary.MeanAbsoluteErrorPercent.ToString("0.00", Pt)%, preço real dentro da banda de 50% em <strong>@((summary.Within50Share * 100).ToString("0", Pt))%</strong> dos casos (ideal 50%) e de 80% em <strong>@((summary.Within80Share * 100).ToString("0", Pt))%</strong> (ideal 80%).
+            </MudText>
+        }
+        @if (_records.Items.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="symbol-name">Ainda não registaste nenhuma projeção. Gera uma com o mercado aberto e carrega em "Registar esta projeção".</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto">
+                <thead>
+                    <tr>
+                        <th>Ativo</th>
+                        <th>Registada</th>
+                        <th>Horizonte até</th>
+                        <th>Previsto</th>
+                        <th>Real</th>
+                        <th>Diferença</th>
+                        <th>Banda</th>
+                        <th>Face ao alvo</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (ProjectionRecordDto item in _records.Items)
+                    {
+                        <tr>
+                            <td>@item.Symbol</td>
+                            <td>@item.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm", Pt)</td>
+                            <td>@item.TargetTime.ToLocalTime().ToString("dd/MM HH:mm", Pt)</td>
+                            <td>@Price(item.ProjectedMedian)</td>
+                            @if (item.ActualPrice is { } actual)
+                            {
+                                <td>@Price(actual)</td>
+                                <td style="color:@SignColor(item.ErrorAbsolute)">@Signed(item.ErrorAbsolute) (@Signed(item.ErrorPercent)%, @Signed(item.ErrorSigmas)σ)</td>
+                                <td>@BandLabel(item.Band)</td>
+                                <td style="color:@SignColor(TowardsTarget(item))">@(item.TargetDistance is null ? "—" : $"{Signed(item.TargetDistance)} ({Signed(item.TargetDistancePercent)}%)")</td>
+                            }
+                            else
+                            {
+                                <td colspan="4" class="symbol-name">@(item.State == "unavailable" ? "Sem preço disponível nessa hora (mercado fechado?)" : $"A aguardar: resolve a partir das {item.TargetTime.ToLocalTime().ToString("HH:mm", Pt)}")</td>
+                            }
+                            <td><MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" aria-label="Apagar" OnClick="@(() => DeleteRecordAsync(item.Id))" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
 </MudContainer>
 
 @code {
@@ -193,6 +267,9 @@
     private string? _error;
     private string? _loadError;
     private bool _busy;
+    private bool _registering;
+    private string? _registeredKey;
+    private ProjectionRecordsView _records = new([], null);
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,12 +277,114 @@
         {
             _quotes = await Api.GetInstrumentsAsync(_cts.Token);
             _chartKind = (await Api.GetProfileAsync(_cts.Token)).ProjectionChartKind;
+            _records = await Api.GetProjectionRecordsAsync(_cts.Token);
         }
         catch (HttpRequestException)
         {
-            _loadError = "Não foi possível carregar os ativos. Verifica se o servidor está a correr.";
+            _loadError = "Não foi possível carregar os dados. Verifica se o servidor está a correr.";
         }
     }
+
+    private async Task LoadRecordsAsync()
+    {
+        try
+        {
+            _records = await Api.GetProjectionRecordsAsync(_cts.Token);
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Não foi possível atualizar as projeções registadas.", Severity.Error);
+        }
+    }
+
+    private static string RegistrationKey(PriceProjection projection) =>
+        $"{projection.Symbol}|{projection.Result.LastTime.UtcTicks}|{projection.Result.HorizonMinutes}";
+
+    private async Task RegisterAsync()
+    {
+        if (_projection is not { } projection)
+        {
+            return;
+        }
+
+        ProjectionResult result = projection.Result;
+        ProjectionBand end = result.Bands[^1];
+        ProjectionPlan? plan = result.Plan;
+        _registering = true;
+
+        try
+        {
+            string? error = await Api.RegisterProjectionAsync(
+                new RegisterProjectionRequest(
+                    projection.Symbol,
+                    result.HorizonMinutes,
+                    result.LastTime,
+                    result.LastPrice,
+                    end.P50,
+                    end.P10,
+                    end.P25,
+                    end.P75,
+                    end.P90,
+                    result.OneSigmaPercent,
+                    plan?.Direction,
+                    plan?.StopLoss,
+                    plan?.TakeProfit,
+                    projection.TrackedSuggestionId),
+                _cts.Token);
+
+            if (error is null)
+            {
+                _registeredKey = RegistrationKey(projection);
+                Snackbar.Add("Projeção registada.", Severity.Success);
+                await LoadRecordsAsync();
+            }
+            else
+            {
+                Snackbar.Add(error, Severity.Error);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Não foi possível registar. Verifica se o servidor está a correr.", Severity.Error);
+        }
+        finally
+        {
+            _registering = false;
+        }
+    }
+
+    private async Task DeleteRecordAsync(long id)
+    {
+        try
+        {
+            await Api.DeleteProjectionRecordAsync(id, _cts.Token);
+            await LoadRecordsAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Não foi possível apagar.", Severity.Error);
+        }
+    }
+
+    private static string Signed(double? value) => value is { } v ? v.ToString(Math.Abs(v) >= 100 ? "+0.##;-0.##;0" : "+0.####;-0.####;0", Pt) : "—";
+
+    private static string SignColor(double? value) => value switch
+    {
+        > 0 => "var(--mud-palette-success)",
+        < 0 => "var(--mud-palette-error)",
+        _ => "inherit"
+    };
+
+    private static double? TowardsTarget(ProjectionRecordDto item) => item.TargetDistance is { } distance
+        ? distance * (item.PlanDirection == TradeDirection.Sell ? -1 : 1)
+        : null;
+
+    private static string BandLabel(string? band) => band switch
+    {
+        "50" => "dentro de 50%",
+        "80" => "dentro de 80%",
+        _ => "fora das bandas"
+    };
 
     private Task<IEnumerable<string>> SearchInstruments(string value, CancellationToken cancellationToken) =>
         Task.FromResult(_quotes

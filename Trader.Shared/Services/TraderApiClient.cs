@@ -139,6 +139,22 @@ public sealed class TraderApiClient(HttpClient httpClient)
             : (null, await ApiError.ReadAsync(response));
     }
 
+    public async Task<string?> RegisterProjectionAsync(RegisterProjectionRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/projection-records", request, cancellationToken);
+
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<ProjectionRecordsView> GetProjectionRecordsAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<ProjectionRecordsView>("api/projection-records", cancellationToken) ?? new ProjectionRecordsView([], null);
+
+    public async Task DeleteProjectionRecordAsync(long id, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.DeleteAsync($"api/projection-records/{id}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<AgenderStatus> SyncAgenderAsync(CancellationToken cancellationToken = default)
     {
         using HttpResponseMessage response = await httpClient.PostAsync("api/agender/sync", null, cancellationToken);

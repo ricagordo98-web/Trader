@@ -90,6 +90,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAgenderSync, AgenderSyncService>();
         services.AddScoped<ITradeAnalysisService, TradeAnalysisService>();
         services.AddScoped<IProjectionService, ProjectionService>();
+        services.AddScoped<IProjectionRecordService, ProjectionRecordService>();
         services.AddHostedService<AgenderSyncWorker>();
         services.AddHttpClient<IAlertPublisher, NtfyPublisher>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IInstrumentService, InstrumentService>();
