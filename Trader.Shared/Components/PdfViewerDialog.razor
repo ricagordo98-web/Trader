@@ -1,0 +1,74 @@
+@implements IAsyncDisposable
+@inject TraderApiClient Api
+@inject IJSRuntime JS
+
+<MudDialog>
+    <DialogContent>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+        }
+        else if (_url is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else
+        {
+            <iframe src="@_url" title="@Title" style="width:100%;height:78vh;border:0;border-radius:6px"></iframe>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private const string ModulePath = "./_content/Trader.Shared/js/files.js";
+
+    private IJSObjectReference? _module;
+    private string? _url;
+    private string? _error;
+
+    [Parameter] public long ItemId { get; set; }
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            await using Stream stream = await Api.OpenLearningPdfAsync(ItemId);
+            using DotNetStreamReference reference = new(stream);
+            _url = await _module.InvokeAsync<string>("createPdfUrl", reference);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JSException)
+        {
+            _error = "Não foi possível abrir o PDF. Verifica se o servidor está a correr.";
+        }
+
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_url is not null)
+            {
+                await _module.InvokeVoidAsync("revokeUrl", _url);
+            }
+
+            await _module.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+}

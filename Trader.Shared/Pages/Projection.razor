@@ -68,7 +68,7 @@
         }
 
         <MudText Typo="Typo.caption" Class="symbol-name d-block mb-3">
-            À esquerda da linha tracejada estão as velas reais; à direita, o cenário mediano projetado (velas) e as linhas laranja tracejadas, que são as bandas de 50% e de 80%. Preços em @projection.Currency, na moeda do ativo.
+            À esquerda da linha tracejada estão as velas reais; à direita, um caminho simulado típico (velas, com altos e baixos como os reais; é ilustrativo, não uma promessa) e as linhas laranja tracejadas, que são as bandas de 50% e de 80%. O gráfico ajusta a escala sozinho, por isso compara os ativos pelos valores em % dos cartões, não pelo desenho. Preços em @projection.Currency, na moeda do ativo.
         </MudText>
 
         <MudGrid Spacing="3" Class="mb-4">
@@ -90,7 +90,7 @@
                 <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100">
                     <MudText Typo="Typo.caption" Class="symbol-name">80% dos caminhos acabam entre</MudText>
                     <MudText Typo="Typo.h6">@Price(end.P10) – @Price(end.P90)</MudText>
-                    <MudText Typo="Typo.caption" Class="symbol-name">±@result.OneSigmaPercent.ToString("0.##", Pt)% a 1 desvio-padrão</MudText>
+                    <MudText Typo="Typo.caption" Class="symbol-name">@((end.P10 / result.LastPrice * 100 - 100).ToString("+0.00;-0.00;0.00", Pt))% a @((end.P90 / result.LastPrice * 100 - 100).ToString("+0.00;-0.00;0.00", Pt))% · ±@result.OneSigmaPercent.ToString("0.##", Pt)% a 1 desvio-padrão</MudText>
                 </MudPaper>
             </MudItem>
             <MudItem xs="6" md="3">
@@ -148,7 +148,7 @@
                     A banda de 80% apanhou o preço real em <strong>@((calibration.Coverage80 * 100).ToString("0", Pt))%</strong> dos casos (ideal: 80%) e a de 50% em <strong>@((calibration.Coverage50 * 100).ToString("0", Pt))%</strong> (ideal: 50%).
                     @if (calibration.DirectionHit is { } hit)
                     {
-                        <span> A direção do cenário mediano acertou em <strong>@((hit * 100).ToString("0", Pt))%</strong> de @calibration.DirectionSamples casos (50% = moeda ao ar).</span>
+                        <span> A direção do cenário acertou em <strong>@((hit * 100).ToString("0", Pt))%</strong> de @calibration.DirectionSamples casos (50% = moeda ao ar).</span>
                     }
                 </MudText>
                 <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
@@ -164,13 +164,15 @@
         <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
             <MudText Typo="Typo.subtitle1" Class="mb-2">A lógica por trás do desenho</MudText>
             <MudText Typo="Typo.body2" Class="mb-2">
-                O motor tem quatro passos, todos técnicas conhecidas:
+                O motor tem seis passos, todos técnicas conhecidas:
             </MudText>
             <MudList T="string" Dense="true" Class="pa-0 mb-2">
                 <MudListItem><strong>1. Volatilidade (EWMA).</strong> Mede o quanto o preço mexe por vela de 5 minutos, dando mais peso ao passado recente (modelo RiskMetrics, λ=0,94), e faz essa volatilidade regressar à média ao longo do horizonte.</MudListItem>
                 <MudListItem><strong>2. Hora do dia.</strong> A volatilidade intradiária tem forma de U (forte na abertura e no fecho). O motor mede-a nas últimas sessões e aplica-a às horas que vão ser projetadas.</MudListItem>
                 <MudListItem><strong>3. Deriva pequena.</strong> Um empurrão leve de momentum e uma força de reversão à VWAP, ambos limitados para nunca dominarem o ruído.</MudListItem>
-                <MudListItem><strong>4. Monte Carlo com simulação histórica filtrada.</strong> Gera 2000 caminhos reamostrando choques reais do próprio ativo (por isso com caudas gordas). A mediana de cada instante forma as velas; os percentis 10, 25, 75 e 90 formam as bandas.</MudListItem>
+                <MudListItem><strong>4. Hábitos do ativo.</strong> O retorno médio de cada faixa de 30 minutos, medido neste ativo e descontada a tendência geral, entra como deriva, encolhido quando não é estatisticamente forte.</MudListItem>
+                <MudListItem><strong>5. Situações parecidas.</strong> Procura no histórico do ativo momentos com a mesma forma nas últimas velas e à mesma hora, e usa o que veio a seguir como deriva (também encolhida). Os passos 4 e 5 desligam-se sozinhos se, no teste sobre o passado, não acertarem a direção melhor do que 50%.</MudListItem>
+                <MudListItem><strong>6. Monte Carlo com simulação histórica filtrada.</strong> Gera 2000 caminhos reamostrando choques reais do próprio ativo (por isso com caudas gordas). Os percentis 10, 25, 50, 75 e 90 de cada instante formam as bandas; as velas seguem um dos caminhos simulados perto da mediana, escolhido por ter um vai-e-vem típico.</MudListItem>
             </MudList>
             @foreach (ProjectionDriver driver in result.Drivers)
             {
@@ -186,7 +188,7 @@
                 </div>
             }
             <MudText Typo="Typo.caption" Class="symbol-name d-block mt-2">
-                Limites: as velas são o cenário <em>mediano</em>, por isso são mais calmas do que as reais (o ruído está nas bandas). Não prevê notícias, resultados nem saltos de abertura. Os parâmetros da deriva são heurísticas, não foram otimizados. Não é aconselhamento financeiro.
+                Limites: as velas são um caminho típico entre milhares possíveis; o que conta são as bandas e as probabilidades. Não prevê notícias, resultados nem saltos de abertura. Os parâmetros da deriva são heurísticas, não foram otimizados. Não é aconselhamento financeiro.
             </MudText>
         </MudPaper>
     }

@@ -8,7 +8,12 @@ public static class ProjectionCalibrator
     public const int CalibrationSimulations = 300;
     public const double MinDirectionalMovePercent = 0.01;
 
-    public static ProjectionCalibration? Evaluate(IReadOnlyList<Candle> candles, int horizonMinutes)
+    public const int MinSamplesToJudge = 12;
+
+    public static bool LearnedFactorsHelp(ProjectionCalibration? calibration) =>
+        calibration is not { DirectionHit: { } hit } || calibration.DirectionSamples < MinSamplesToJudge || hit > 0.5;
+
+    public static ProjectionCalibration? Evaluate(IReadOnlyList<Candle> candles, int horizonMinutes, double learnedWeight = 1)
     {
         int steps = horizonMinutes / ProjectionEngine.StepMinutes;
         int stride = Math.Max(steps, 6);
@@ -28,7 +33,7 @@ public static class ProjectionCalibrator
                 continue;
             }
 
-            ProjectionResult? result = ProjectionEngine.Project(candles.Take(origin + 1).ToList(), horizonMinutes, CalibrationSimulations);
+            ProjectionResult? result = ProjectionEngine.Project(candles.Take(origin + 1).ToList(), horizonMinutes, CalibrationSimulations, learnedWeight);
 
             if (result is null)
             {

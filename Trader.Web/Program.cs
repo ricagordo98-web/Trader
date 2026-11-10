@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Trader.Core.Abstractions;
 using Trader.Infrastructure;
 using Trader.Infrastructure.Backup;
+using Trader.Infrastructure.Learning;
 using Trader.Infrastructure.Persistence;
 using Trader.Shared.Extensions;
 using Trader.Shared.Services;
@@ -31,6 +32,7 @@ SqliteConnectionStringBuilder connectionString = new(builder.Configuration.GetCo
 connectionString.DataSource = Path.GetFullPath(connectionString.DataSource, contentRoot);
 builder.Configuration["ConnectionStrings:Trader"] = connectionString.ToString();
 builder.Services.PostConfigure<BackupOptions>(options => options.Directory = Path.GetFullPath(options.Directory, contentRoot));
+builder.Services.PostConfigure<LearningOptions>(options => options.Directory = Path.GetFullPath(options.Directory, contentRoot));
 DatabaseImport.ApplyPending(
     connectionString.DataSource,
     Path.GetFullPath(builder.Configuration[$"{BackupOptions.SectionName}:{nameof(BackupOptions.Directory)}"] ?? new BackupOptions().Directory, contentRoot),
@@ -117,6 +119,7 @@ app.MapSystemEndpoints();
 app.MapAgenderEndpoints();
 app.MapAnalysisEndpoints();
 app.MapProjectionEndpoints();
+app.MapLearningEndpoints();
 app.MapCalendarEndpoints();
 app.MapChartTemplateEndpoints();
 app.MapSummaryEndpoints();

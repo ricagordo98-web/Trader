@@ -17,12 +17,17 @@ public static class ProjectionEngine
     private const double Lambda = 0.94;
     private const double MomentumWeight = 0.03;
     private const double ReversionPerStep = 0.005;
-    private const double MaxDriftInSigmas = 0.1;
+    private const double MaxDriftInSigmas = 0.15;
     private const double GapFactor = 3;
+    private const double ShrinkT = 4;
+    private const int AnalogWindow = 12;
+    private const int AnalogNeighbours = 30;
+    private const int MinAnalogs = 12;
+    private const int TypicalPathPool = 200;
 
     private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
 
-    public static ProjectionResult? Project(IReadOnlyList<Candle> candles, int horizonMinutes, int simulations = DefaultSimulations)
+    public static ProjectionResult? Project(IReadOnlyList<Candle> candles, int horizonMinutes, int simulations = DefaultSimulations, double learnedWeight = 1)
     {
         if (candles.Count < MinBars || horizonMinutes < StepMinutes || candles.Any(c => c.Close <= 0 || !double.IsFinite(c.Close)))
         {
@@ -41,9 +46,10 @@ public static class ProjectionEngine
 
         (double vwap, double momentumPerStep) = DriftInputs(candles, residuals.Sigma);
         Random random = new(HashCode.Combine(last.Time.UtcTicks, steps, candles.Count));
-        double[][] closes = Simulate(last, steps, simulations, residuals, seasonal, vwap, momentumPerStep, random);
+        Learned learned = Learn(candles, steps, seasonal, residuals, learnedWeight);
+        double[][] closes = Simulate(last, steps, simulations, residuals, seasonal, vwap, momentumPerStep, learned.Drift, random);
 
-        return Summarize(last, horizonMinutes, steps, closes, residuals, seasonal, vwap, momentumPerStep, candles);
+        return Summarize(last, horizonMinutes, steps, closes, residuals, seasonal, vwap, momentumPerStep, candles, learned);
     }
 
     private static double[][] Simulate(
@@ -54,6 +60,7 @@ public static class ProjectionEngine
         double[] seasonal,
         double vwap,
         double momentumPerStep,
+        double[] learnedDrift,
         Random random)
     {
         double[][] closes = new double[steps][];
@@ -79,7 +86,7 @@ public static class ProjectionEngine
 
             for (int s = 0; s < steps; s++)
             {
-                double drift = Math.Clamp(momentumPerStep - ReversionPerStep * (logPrice - logVwap), -cap, cap);
+                double drift = Math.Clamp(momentumPerStep - ReversionPerStep * (logPrice - logVwap) + learnedDrift[s], -cap, cap);
                 double epsilon = residuals.Standardized[random.Next(residuals.Standardized.Length)];
                 logPrice += drift + stepSigma[s] * epsilon;
                 closes[s][p] = Math.Exp(logPrice);
@@ -98,11 +105,13 @@ public static class ProjectionEngine
         double[] seasonal,
         double vwap,
         double momentumPerStep,
-        IReadOnlyList<Candle> candles)
+        IReadOnlyList<Candle> candles,
+        Learned learned)
     {
         List<ProjectionBand> bands = [];
         List<ProjectedBar> bars = [];
         double previousClose = last.Close;
+        int typical = TypicalPath(closes, last.Close);
 
         for (int s = 0; s < steps; s++)
         {
@@ -111,11 +120,12 @@ public static class ProjectionEngine
             double median = Percentile(sorted, 0.5);
             bands.Add(new ProjectionBand(time, Percentile(sorted, 0.10), Percentile(sorted, 0.25), median, Percentile(sorted, 0.75), Percentile(sorted, 0.90)));
 
+            double close = closes[s][typical];
             double wickSize = residuals.WickRatio * HorizonSigma(residuals, 1) * seasonal[Bucket(time)] * previousClose;
-            double high = Math.Max(previousClose, median) + wickSize;
-            double low = Math.Max(Math.Min(previousClose, median) - wickSize, double.Epsilon);
-            bars.Add(new ProjectedBar(time, previousClose, high, low, median));
-            previousClose = median;
+            double high = Math.Max(previousClose, close) + wickSize;
+            double low = Math.Max(Math.Min(previousClose, close) - wickSize, double.Epsilon);
+            bars.Add(new ProjectedBar(time, previousClose, high, low, close));
+            previousClose = close;
         }
 
         double[] ending = closes[^1];
@@ -135,8 +145,35 @@ public static class ProjectionEngine
             up,
             (median50 / last.Close - 1) * 100,
             sigma * 100,
-            Drivers(last, steps, residuals, seasonal, vwap, momentumPerStep, sigma, candles),
-            BuildPlan(last, closes, residuals, seasonal, up, sigma));
+            Drivers(last, steps, residuals, seasonal, vwap, momentumPerStep, sigma, candles, learned),
+            BuildPlan(last, closes, residuals, seasonal, up, sigma),
+            learned.Weight);
+    }
+
+    private static int TypicalPath(double[][] closes, double start)
+    {
+        int steps = closes.Length;
+        int simulations = closes[0].Length;
+        double[] ends = closes[^1];
+        double medianEnd = Percentile(ends.Order().ToArray(), 0.5);
+        int pool = Math.Min(TypicalPathPool, simulations);
+        int[] nearest = Enumerable.Range(0, simulations).OrderBy(p => Math.Abs(ends[p] - medianEnd)).Take(pool).ToArray();
+        double[] variation = new double[simulations];
+
+        foreach (int p in nearest)
+        {
+            double previous = start;
+
+            for (int s = 0; s < steps; s++)
+            {
+                variation[p] += Math.Abs(Math.Log(closes[s][p] / previous));
+                previous = closes[s][p];
+            }
+        }
+
+        double target = Median(nearest.Select(p => variation[p]).ToList());
+
+        return nearest.OrderBy(p => Math.Abs(variation[p] - target)).First();
     }
 
     private const double PlanBandSigmas = 0.674;
@@ -229,7 +266,8 @@ public static class ProjectionEngine
         double vwap,
         double momentumPerStep,
         double horizonSigma,
-        IReadOnlyList<Candle> candles)
+        IReadOnlyList<Candle> candles,
+        Learned learned)
     {
         double upcoming = Enumerable.Range(1, steps).Average(s => seasonal[Bucket(last.Time.AddMinutes(s * StepMinutes))]);
         double reversionEffect = -ReversionPerStep * Math.Log(last.Close / vwap) * steps * 100;
@@ -256,10 +294,200 @@ public static class ProjectionEngine
                 $"O preço está {(Math.Log(last.Close / vwap) * 100).ToString("+0.##;-0.##;0", Pt)}% face à VWAP da sessão ({vwap.ToString("0.#####", Pt)}). Há uma força suave a puxar o preço para lá, que enfraquece à medida que ele se aproxima.",
                 reversionEffect),
             new ProjectionDriver(
+                "Hábitos deste ativo",
+                learned.Weight <= 0
+                    ? "Desligado: no teste sobre o passado, este padrão não acertou a direção melhor do que a moeda ao ar para este ativo e horizonte, por isso não conta."
+                    : $"Cada ativo tem os seus hábitos ao longo da sessão. Para as próximas faixas de 30 min, o histórico deste ativo deixa uma deriva de {learned.ProfileEffect.ToString("+0.###;-0.###;0", Pt)}% (retorno médio por faixa, descontada a tendência geral do mês e encolhida quando não é estatisticamente forte).",
+                learned.ProfileEffect),
+            new ProjectionDriver(
+                "Situações parecidas",
+                learned.Weight <= 0
+                    ? "Desligado: no teste sobre o passado, este padrão não acertou a direção melhor do que a moeda ao ar para este ativo e horizonte, por isso não conta."
+                    : learned.Neighbours == 0
+                        ? "Não há situações parecidas suficientes no histórico guardado para este ativo, por isso este fator não conta."
+                        : $"Procurei neste ativo {learned.Neighbours} momentos em que as últimas {AnalogWindow} velas tinham uma forma parecida, à mesma hora do dia, e vi o que veio a seguir: {learned.AnalogEffect.ToString("+0.###;-0.###;0", Pt)}% no horizonte, já encolhido (t={learned.AnalogT.ToString("0.##", Pt)}; quanto mais perto de 0, menos conta).",
+                learned.AnalogEffect),
+            new ProjectionDriver(
                 "Caudas gordas",
                 $"Os choques são reamostrados dos retornos reais do ativo (simulação histórica filtrada), por isso movimentos grandes são mais frequentes do que numa curva normal (curtose {residuals.Kurtosis.ToString("0.#", Pt)}; 3 seria normal). A deriva está limitada a ±{(cap * 100).ToString("0.###", Pt)}% por vela para a direção nunca dominar o ruído.",
                 null)
         ];
+    }
+
+    private static Learned Learn(IReadOnlyList<Candle> candles, int steps, double[] seasonal, Residuals residuals, double weight)
+    {
+        double[] drift = new double[steps];
+
+        if (weight <= 0)
+        {
+            return new Learned(drift, 0, 0, 0, 0, 0);
+        }
+
+        double[] profile = ProfileDrift(candles);
+        (double[] analog, int neighbours, double t) = AnalogDrift(candles, steps, seasonal, residuals.BaseSigma);
+        DateTimeOffset last = candles[^1].Time;
+        double profileSum = 0;
+        double analogSum = 0;
+
+        for (int s = 0; s < steps; s++)
+        {
+            double fromProfile = profile[Bucket(last.AddMinutes((s + 1) * StepMinutes))];
+            drift[s] = weight * (fromProfile + analog[s]);
+            profileSum += weight * fromProfile;
+            analogSum += weight * analog[s];
+        }
+
+        return new Learned(drift, profileSum * 100, analogSum * 100, neighbours, t, weight);
+    }
+
+    private static double[] ProfileDrift(IReadOnlyList<Candle> candles)
+    {
+        double[] sums = new double[BucketsPerDay];
+        double[] squares = new double[BucketsPerDay];
+        int[] counts = new int[BucketsPerDay];
+        double total = 0;
+        int all = 0;
+
+        for (int i = 1; i < candles.Count; i++)
+        {
+            if ((candles[i].Time - candles[i - 1].Time).TotalMinutes > StepMinutes * GapFactor)
+            {
+                continue;
+            }
+
+            double r = Math.Log(candles[i].Close / candles[i - 1].Close);
+            int b = Bucket(candles[i].Time);
+            sums[b] += r;
+            squares[b] += r * r;
+            counts[b]++;
+            total += r;
+            all++;
+        }
+
+        double overall = all > 0 ? total / all : 0;
+        double[] profile = new double[BucketsPerDay];
+
+        for (int b = 0; b < BucketsPerDay; b++)
+        {
+            int n = counts[b];
+
+            if (n < MinBucketSamples)
+            {
+                continue;
+            }
+
+            double average = sums[b] / n;
+            double standardError = Math.Sqrt(Math.Max(squares[b] / n - average * average, 0) / n);
+            double mean = average - overall;
+            double t = standardError > 0 ? mean / standardError : 0;
+            profile[b] = mean * t * t / (t * t + ShrinkT);
+        }
+
+        return profile;
+    }
+
+    private static (double[] Drift, int Neighbours, double T) AnalogDrift(IReadOnlyList<Candle> candles, int steps, double[] seasonal, double baseSigma)
+    {
+        double[] drift = new double[steps];
+        int n = candles.Count;
+
+        if (baseSigma <= 0 || n < AnalogWindow + steps + 2)
+        {
+            return (drift, 0, 0);
+        }
+
+        double[] z = new double[n];
+        int[] breaks = new int[n];
+
+        for (int i = 1; i < n; i++)
+        {
+            bool linked = (candles[i].Time - candles[i - 1].Time).TotalMinutes <= StepMinutes * GapFactor;
+            breaks[i] = breaks[i - 1] + (linked ? 0 : 1);
+            z[i] = linked ? Math.Log(candles[i].Close / candles[i - 1].Close) / (seasonal[Bucket(candles[i].Time)] * baseSigma) : 0;
+        }
+
+        if (breaks[n - 1] - breaks[n - 1 - AnalogWindow] != 0)
+        {
+            return (drift, 0, 0);
+        }
+
+        double[] current = CumulativeShape(z, n - 1);
+        int currentBucket = Bucket(candles[^1].Time);
+        List<(double Distance, int Index)> matches = [];
+
+        for (int i = AnalogWindow; i <= n - 1 - steps; i++)
+        {
+            int bucketGap = Math.Abs(Bucket(candles[i].Time) - currentBucket);
+
+            if (Math.Min(bucketGap, BucketsPerDay - bucketGap) > 1 || breaks[i + steps] - breaks[i - AnalogWindow] != 0)
+            {
+                continue;
+            }
+
+            double[] shape = CumulativeShape(z, i);
+            matches.Add((shape.Zip(current, (a, b) => (a - b) * (a - b)).Sum(), i));
+        }
+
+        List<int> chosen = [];
+
+        foreach ((double _, int index) in matches.OrderBy(m => m.Distance))
+        {
+            if (chosen.All(c => Math.Abs(c - index) >= AnalogWindow))
+            {
+                chosen.Add(index);
+            }
+
+            if (chosen.Count == AnalogNeighbours)
+            {
+                break;
+            }
+        }
+
+        if (chosen.Count < MinAnalogs)
+        {
+            return (drift, 0, 0);
+        }
+
+        double[] stepMean = new double[steps];
+        double[] cumulative = new double[chosen.Count];
+
+        for (int k = 0; k < chosen.Count; k++)
+        {
+            for (int s = 0; s < steps; s++)
+            {
+                double forward = z[chosen[k] + 1 + s];
+                stepMean[s] += forward / chosen.Count;
+                cumulative[k] += forward;
+            }
+        }
+
+        double mean = cumulative.Average();
+        double deviation = Math.Sqrt(cumulative.Sum(c => (c - mean) * (c - mean)) / chosen.Count);
+        double tStat = deviation > 0 ? mean / (deviation / Math.Sqrt(chosen.Count)) : 0;
+        double shrink = tStat * tStat / (tStat * tStat + ShrinkT);
+        DateTimeOffset last = candles[^1].Time;
+
+        for (int s = 0; s < steps; s++)
+        {
+            double scale = baseSigma * seasonal[Bucket(last.AddMinutes((s + 1) * StepMinutes))];
+            drift[s] = shrink * (0.5 * stepMean[s] + 0.5 * mean / steps) * scale;
+        }
+
+        return (drift, chosen.Count, tStat);
+    }
+
+    private static double[] CumulativeShape(double[] z, int end)
+    {
+        double[] shape = new double[AnalogWindow];
+        double sum = 0;
+
+        for (int j = 0; j < AnalogWindow; j++)
+        {
+            sum += z[end - AnalogWindow + 1 + j];
+            shape[j] = sum;
+        }
+
+        return shape;
     }
 
     private static int Days(IReadOnlyList<Candle> candles) =>
@@ -426,6 +654,8 @@ public static class ProjectionEngine
     }
 
     private static double Median(List<double> values) => Percentile(values.Order().ToArray(), 0.5);
+
+    private sealed record Learned(double[] Drift, double ProfileEffect, double AnalogEffect, int Neighbours, double AnalogT, double Weight);
 
     private sealed record Residuals(double[] Standardized, double Sigma, double BaseSigma, double CurrentVariance, double WickRatio, double Kurtosis);
 }

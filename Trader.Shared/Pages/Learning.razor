@@ -1,0 +1,233 @@
+@page "/learning"
+@using System.Globalization
+@using Trader.Shared.Components
+@implements IDisposable
+@inject TraderApiClient Api
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Learning · Trader</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6 page-fade">
+    <MudText Typo="Typo.h5" Class="mb-1">Learning</MudText>
+    <MudText Typo="Typo.body2" Class="symbol-name mb-4">
+        A tua biblioteca de estudo: PDFs guardados no servidor e ligações para fóruns, sites de ajuda e artigos sobre técnicas de trading.
+    </MudText>
+
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Adicionar</MudText>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_error</MudAlert>
+        }
+        <MudGrid Spacing="2" Class="align-end">
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" @bind-Value="_title" Label="Título" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="LearningRules.MaxTitleLength" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField T="string" @bind-Value="_category" Label="Categoria (opcional)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="LearningRules.MaxCategoryLength" />
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudTextField T="string" @bind-Value="_url" Label="Endereço da ligação" Placeholder="https://" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="LearningRules.MaxUrlLength" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="AddLinkAsync" StartIcon="@Icons.Material.Filled.AddLink">Guardar ligação</MudButton>
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-center gap-2">
+                <MudText Typo="Typo.caption" Class="symbol-name">Ou um PDF (até @(LearningRules.MaxPdfBytes / 1024 / 1024) MB), usa o título acima ou o nome do ficheiro:</MudText>
+                <InputFile OnChange="UploadPdfAsync" accept=".pdf,application/pdf" disabled="@_busy" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_items.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="symbol-name">Ainda não há nada guardado. Adiciona uma ligação ou um PDF acima.</MudText>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <MudChip T="string" Size="Size.Small" Variant="@(_filter is null ? Variant.Filled : Variant.Outlined)" OnClick="() => SetFilter(null)">Tudo (@_items.Count)</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="@(_filter == KindPdf ? Variant.Filled : Variant.Outlined)" OnClick="() => SetFilter(KindPdf)">PDFs</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="@(_filter == KindLink ? Variant.Filled : Variant.Outlined)" OnClick="() => SetFilter(KindLink)">Ligações</MudChip>
+            @foreach (string category in Categories)
+            {
+                string current = category;
+                <MudChip T="string" Size="Size.Small" Variant="@(_filter == current ? Variant.Filled : Variant.Outlined)" OnClick="() => SetFilter(current)">@current</MudChip>
+            }
+        </div>
+
+        <MudGrid Spacing="3">
+            @foreach (LearningItemDto item in Visible)
+            {
+                <MudItem xs="12" md="6" lg="4">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100 d-flex flex-column gap-1">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@(item.Kind == LearningKind.Pdf ? Icons.Material.Filled.PictureAsPdf : Icons.Material.Filled.Link)" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle2" Class="flex-grow-1" Style="word-break:break-word">@item.Title</MudText>
+                        </div>
+                        @if (item.Kind == LearningKind.Link)
+                        {
+                            <MudText Typo="Typo.caption" Class="symbol-name" Style="word-break:break-all">@item.Url</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="symbol-name">@item.FileName · @FileSize(item.SizeBytes)</MudText>
+                        }
+                        <div class="d-flex align-center gap-2 mt-auto pt-2">
+                            @if (item.Category is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0 tag-chip">@item.Category</MudChip>
+                            }
+                            <MudText Typo="Typo.caption" Class="symbol-name flex-grow-1">@item.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy", Pt)</MudText>
+                            @if (item.Kind == LearningKind.Pdf)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.MenuBook" OnClick="() => ReadAsync(item)">Ler</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@item.Url" Target="_blank" StartIcon="@Icons.Material.Filled.OpenInNew">Abrir</MudButton>
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" aria-label="Apagar" OnClick="() => DeleteAsync(item)" />
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private const string KindPdf = "__pdf";
+    private const string KindLink = "__link";
+
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private readonly CancellationTokenSource _cts = new();
+    private IReadOnlyList<LearningItemDto> _items = [];
+    private string? _title;
+    private string? _category;
+    private string? _url;
+    private string? _error;
+    private string? _filter;
+    private bool _loading = true;
+    private bool _busy;
+
+    private IEnumerable<string> Categories => _items
+        .Select(i => i.Category)
+        .OfType<string>()
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Order(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<LearningItemDto> Visible => _filter switch
+    {
+        null => _items,
+        KindPdf => _items.Where(i => i.Kind == LearningKind.Pdf),
+        KindLink => _items.Where(i => i.Kind == LearningKind.Link),
+        _ => _items.Where(i => string.Equals(i.Category, _filter, StringComparison.OrdinalIgnoreCase))
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _items = await Api.GetLearningItemsAsync(_cts.Token);
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível carregar a biblioteca. Verifica se o servidor está a correr.";
+        }
+    }
+
+    private void SetFilter(string? filter) => _filter = filter;
+
+    private async Task AddLinkAsync()
+    {
+        _busy = true;
+        _error = await Api.AddLearningLinkAsync(new AddLearningLinkRequest(_title ?? string.Empty, _url ?? string.Empty, _category), _cts.Token);
+
+        if (_error is null)
+        {
+            (_title, _url, _category) = (null, null, null);
+            await ReloadAsync();
+            Snackbar.Add("Ligação guardada.", Severity.Success);
+        }
+
+        _busy = false;
+    }
+
+    private async Task UploadPdfAsync(InputFileChangeEventArgs args)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            string title = string.IsNullOrWhiteSpace(_title) ? Path.GetFileNameWithoutExtension(args.File.Name) : _title;
+            await using Stream stream = args.File.OpenReadStream(LearningRules.MaxPdfBytes, _cts.Token);
+            _error = await Api.UploadLearningPdfAsync(title, _category, args.File.Name, stream, _cts.Token);
+
+            if (_error is null)
+            {
+                (_title, _url, _category) = (null, null, null);
+                await ReloadAsync();
+                Snackbar.Add("PDF guardado no servidor.", Severity.Success);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or HttpRequestException)
+        {
+            _error = "Não foi possível enviar o PDF. Verifica se o servidor está a correr e se o ficheiro não excede o limite.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReadAsync(LearningItemDto item)
+    {
+        DialogParameters<PdfViewerDialog> parameters = new() { { x => x.ItemId, item.Id }, { x => x.Title, item.Title } };
+        await DialogService.ShowAsync<PdfViewerDialog>(item.Title, parameters, new DialogOptions { MaxWidth = MaxWidth.ExtraLarge, FullWidth = true, CloseButton = true, CloseOnEscapeKey = true });
+    }
+
+    private async Task DeleteAsync(LearningItemDto item)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Apagar da biblioteca",
+            item.Kind == LearningKind.Pdf
+                ? $"Apagar \"{item.Title}\"? O PDF é removido do servidor e não pode ser recuperado."
+                : $"Apagar a ligação \"{item.Title}\"?",
+            yesText: "Apagar",
+            cancelText: "Cancelar");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await Api.DeleteLearningItemAsync(item.Id, _cts.Token);
+        _filter = null;
+        await ReloadAsync();
+        Snackbar.Add("Apagado.", Severity.Info);
+    }
+
+    private static string FileSize(long bytes) => bytes >= 1024 * 1024
+        ? $"{(bytes / 1024d / 1024d).ToString("0.#", Pt)} MB"
+        : $"{Math.Max(1, bytes / 1024).ToString(Pt)} KB";
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

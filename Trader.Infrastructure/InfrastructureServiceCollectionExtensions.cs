@@ -3,6 +3,7 @@ using Trader.Infrastructure.Analysis;
 using Trader.Infrastructure.Projection;
 using Trader.Infrastructure.Alerts;
 using Trader.Infrastructure.Backup;
+using Trader.Infrastructure.Learning;
 using Trader.Infrastructure.Calendar;
 using Trader.Infrastructure.Charts;
 using Trader.Infrastructure.Currency;
@@ -75,6 +76,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.Configure<BackupOptions>(configuration.GetSection(BackupOptions.SectionName));
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IDatabaseImportService, DatabaseImportService>();
+        services.Configure<LearningOptions>(configuration.GetSection(LearningOptions.SectionName));
+        services.AddScoped<ILearningService, LearningService>();
         services.AddHostedService<BackupWorker>();
         services.AddHttpClient<ICalendarService, CalendarService>(client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddHostedService<CalendarAlertWorker>();

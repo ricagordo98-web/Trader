@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Trader.Core.Journal;
+using Trader.Core.Learning;
 using Trader.Core.Models;
 using Trader.Core.Projection;
 using Trader.Core.Simulator;
@@ -23,6 +24,7 @@ public sealed class TraderDbContext(DbContextOptions<TraderDbContext> options) :
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<PriceAlert> PriceAlerts => Set<PriceAlert>();
     public DbSet<ProjectionRecord> ProjectionRecords => Set<ProjectionRecord>();
+    public DbSet<LearningItem> LearningItems => Set<LearningItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -145,6 +147,18 @@ public sealed class TraderDbContext(DbContextOptions<TraderDbContext> options) :
             entity.Property(r => r.OriginTime).HasConversion(utcTicks);
             entity.Property(r => r.TargetTime).HasConversion(utcTicks);
             entity.Property(r => r.ResolvedAt).HasConversion(utcTicks);
+        });
+
+        modelBuilder.Entity<LearningItem>(entity =>
+        {
+            entity.HasIndex(i => i.CreatedAt);
+            entity.Property(i => i.Title).HasMaxLength(LearningRules.MaxTitleLength).IsRequired();
+            entity.Property(i => i.Kind).HasConversion<string>().HasMaxLength(8);
+            entity.Property(i => i.Category).HasMaxLength(LearningRules.MaxCategoryLength);
+            entity.Property(i => i.Url).HasMaxLength(LearningRules.MaxUrlLength);
+            entity.Property(i => i.FileName).HasMaxLength(260);
+            entity.Property(i => i.StoredName).HasMaxLength(64);
+            entity.Property(i => i.CreatedAt).HasConversion(utcTicks);
         });
 
         modelBuilder.Entity<Alert>(entity =>

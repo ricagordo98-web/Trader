@@ -8,7 +8,7 @@ public class ProjectionTests
 {
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-10-01T13:30:00Z");
 
-    private static List<Candle> Series(int days = 15, double sigma = 0.001, int seed = 7, bool continuous = false)
+    private static List<Candle> Series(int days = 15, double sigma = 0.001, int seed = 7, bool continuous = false, Func<DateTimeOffset, double>? extraDrift = null)
     {
         Random random = new(seed);
         List<Candle> candles = [];
@@ -24,7 +24,7 @@ public class ProjectionTests
                 double edge = Math.Abs(bar - 39) / 39.0;
                 double vol = sigma * (0.6 + 1.2 * edge);
                 double open = price;
-                price *= Math.Exp(vol * Normal(random));
+                price *= Math.Exp(vol * Normal(random) + (extraDrift?.Invoke(time) ?? 0));
                 double wick = vol * Math.Abs(Normal(random)) * 0.3;
                 candles.Add(new Candle(time, open, Math.Max(open, price) * (1 + wick), Math.Min(open, price) * (1 - wick), price, 1000));
             }
@@ -98,8 +98,52 @@ public class ProjectionTests
     {
         ProjectionResult result = ProjectionEngine.Project(Series(), 120)!;
 
-        result.Drivers.Should().HaveCount(5);
+        result.Drivers.Should().HaveCount(7);
         result.ProbabilityUp.Should().BeInRange(0, 1);
+    }
+
+    [Fact]
+    public void Project_AssetWithATimeOfDayHabit_PicksItUpAndDiffersFromOneWithout()
+    {
+        List<Candle> habit = Series(continuous: true, extraDrift: t => t.Hour == 15 ? 0.0006 : 0);
+        List<Candle> plain = Series(continuous: true);
+
+        ProjectionResult withHabit = ProjectionEngine.Project(habit, 120)!;
+        ProjectionResult without = ProjectionEngine.Project(plain, 120)!;
+
+        ProjectionDriver profile = withHabit.Drivers.Single(d => d.Name == "Hábitos deste ativo");
+        profile.EffectPercent.Should().NotBe(0);
+        Math.Abs(profile.EffectPercent!.Value).Should().BeGreaterThan(Math.Abs(without.Drivers.Single(d => d.Name == "Hábitos deste ativo").EffectPercent!.Value));
+    }
+
+    [Fact]
+    public void Project_LearnedWeightZero_TurnsTheLearnedFactorsOff()
+    {
+        ProjectionResult result = ProjectionEngine.Project(Series(), 120, ProjectionEngine.DefaultSimulations, 0)!;
+
+        result.LearnedWeight.Should().Be(0);
+        result.Drivers.Where(d => d.Name is "Hábitos deste ativo" or "Situações parecidas").Should().OnlyContain(d => d.EffectPercent == 0 && d.Detail.StartsWith("Desligado"));
+    }
+
+    [Fact]
+    public void Project_Bars_FollowATypicalPathWithRealisticZigZagInsteadOfASmoothMedian()
+    {
+        ProjectionResult result = ProjectionEngine.Project(Series(), 120)!;
+
+        double barMoves = result.Bars.Sum(b => Math.Abs(b.Close - b.Open));
+        double medianMoves = result.Bands.Zip(result.Bands.Skip(1), (a, b) => Math.Abs(b.P50 - a.P50)).Sum();
+
+        barMoves.Should().BeGreaterThan(medianMoves);
+        result.Bars[^1].Close.Should().BeInRange(result.Bands[^1].P25, result.Bands[^1].P75);
+    }
+
+    [Fact]
+    public void LearnedFactorsHelp_PoorDirectionHitWithEnoughSamples_IsFalse()
+    {
+        ProjectionCalibrator.LearnedFactorsHelp(new ProjectionCalibration(30, 0.8, 0.5, 0.45, 20)).Should().BeFalse();
+        ProjectionCalibrator.LearnedFactorsHelp(new ProjectionCalibration(30, 0.8, 0.5, 0.45, 5)).Should().BeTrue();
+        ProjectionCalibrator.LearnedFactorsHelp(new ProjectionCalibration(30, 0.8, 0.5, 0.56, 20)).Should().BeTrue();
+        ProjectionCalibrator.LearnedFactorsHelp(null).Should().BeTrue();
     }
 
     [Fact]

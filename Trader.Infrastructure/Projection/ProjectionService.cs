@@ -38,6 +38,13 @@ public sealed class ProjectionService(TraderDbContext dbContext, IMarketDataServ
         }
 
         ProjectionCalibration? calibration = ProjectionCalibrator.Evaluate(candles, horizonMinutes);
+
+        if (!ProjectionCalibrator.LearnedFactorsHelp(calibration))
+        {
+            result = ProjectionEngine.Project(candles, horizonMinutes, ProjectionEngine.DefaultSimulations, 0) ?? result;
+            calibration = ProjectionCalibrator.Evaluate(candles, horizonMinutes, 0);
+        }
+
         DateTimeOffset now = timeProvider.GetUtcNow();
         TimeSpan age = now - candles[^1].Time;
         bool open = age <= OpenTolerance;

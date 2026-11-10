@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Trader.Core.Agender;
 using Trader.Core.Analysis;
+using Trader.Core.Learning;
 using Trader.Core.Projection;
 using Trader.Core.Alerts;
 using Trader.Core.Backtesting;
@@ -152,6 +153,33 @@ public sealed class TraderApiClient(HttpClient httpClient)
     public async Task DeleteProjectionRecordAsync(long id, CancellationToken cancellationToken = default)
     {
         using HttpResponseMessage response = await httpClient.DeleteAsync($"api/projection-records/{id}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<LearningItemDto>> GetLearningItemsAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<List<LearningItemDto>>("api/learning", cancellationToken) ?? [];
+
+    public async Task<string?> AddLearningLinkAsync(AddLearningLinkRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/learning/links", request, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<string?> UploadLearningPdfAsync(string title, string? category, string fileName, Stream content, CancellationToken cancellationToken = default)
+    {
+        string query = $"title={Uri.EscapeDataString(title)}&category={Uri.EscapeDataString(category ?? string.Empty)}&fileName={Uri.EscapeDataString(fileName)}";
+        using StreamContent body = new(content);
+        body.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        using HttpResponseMessage response = await httpClient.PostAsync($"api/learning/pdf?{query}", body, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<Stream> OpenLearningPdfAsync(long id, CancellationToken cancellationToken = default) =>
+        await httpClient.GetStreamAsync($"api/learning/{id}/file", cancellationToken);
+
+    public async Task DeleteLearningItemAsync(long id, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.DeleteAsync($"api/learning/{id}", cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 

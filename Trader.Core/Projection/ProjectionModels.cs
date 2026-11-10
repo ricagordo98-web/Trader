@@ -33,7 +33,8 @@ public sealed record ProjectionResult(
     double ExpectedMovePercent,
     double OneSigmaPercent,
     IReadOnlyList<ProjectionDriver> Drivers,
-    ProjectionPlan? Plan = null);
+    ProjectionPlan? Plan = null,
+    double LearnedWeight = 1);
 
 public sealed record PriceProjection(
     string Symbol,
