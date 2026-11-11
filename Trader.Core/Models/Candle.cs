@@ -6,4 +6,5 @@ public sealed record Candle(
     double High,
     double Low,
     double Close,
-    double Volume);
+    double Volume,
+    double? AdjustedClose = null);

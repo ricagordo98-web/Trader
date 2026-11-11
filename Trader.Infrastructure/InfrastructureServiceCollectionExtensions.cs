@@ -4,6 +4,7 @@ using Trader.Infrastructure.Projection;
 using Trader.Infrastructure.Alerts;
 using Trader.Infrastructure.Backup;
 using Trader.Infrastructure.Learning;
+using Trader.Infrastructure.Rotation;
 using Trader.Infrastructure.Calendar;
 using Trader.Infrastructure.Charts;
 using Trader.Infrastructure.Currency;
@@ -71,6 +72,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IScoringSettings, ScoringSettings>();
         services.AddScoped<IIntradaySettings, IntradaySettings>();
         services.AddScoped<IBacktestService, BacktestService>();
+        services.AddScoped<IRotationService, RotationService>();
         services.AddScoped<IIntradayBacktestService, IntradayBacktestService>();
         services.AddScoped<IJournalService, JournalService>();
         services.Configure<BackupOptions>(configuration.GetSection(BackupOptions.SectionName));

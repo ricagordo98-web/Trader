@@ -113,6 +113,7 @@ app.MapAlertRuleEndpoints();
 app.MapChartLayoutEndpoints();
 app.MapExplainEndpoints();
 app.MapBacktestEndpoints();
+app.MapRotationEndpoints();
 app.MapJournalEndpoints();
 app.MapAlertEndpoints();
 app.MapSystemEndpoints();

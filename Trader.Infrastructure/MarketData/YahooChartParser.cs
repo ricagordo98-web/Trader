@@ -53,6 +53,14 @@ public static class YahooChartParser
         JsonElement close = quote.GetProperty("close");
         quote.TryGetProperty("volume", out JsonElement volume);
 
+        JsonElement adjusted = default;
+        bool hasAdjusted = indicators.TryGetProperty("adjclose", out JsonElement adjustedBlocks)
+            && adjustedBlocks.ValueKind == JsonValueKind.Array
+            && adjustedBlocks.GetArrayLength() > 0
+            && adjustedBlocks[0].TryGetProperty("adjclose", out adjusted)
+            && adjusted.ValueKind == JsonValueKind.Array
+            && adjusted.GetArrayLength() == timestamps.GetArrayLength();
+
         List<Candle> candles = new(timestamps.GetArrayLength());
 
         for (int i = 0; i < timestamps.GetArrayLength(); i++)
@@ -75,7 +83,8 @@ public static class YahooChartParser
                 high[i].GetDouble(),
                 low[i].GetDouble(),
                 close[i].GetDouble(),
-                candleVolume));
+                candleVolume,
+                hasAdjusted && adjusted[i].ValueKind == JsonValueKind.Number ? adjusted[i].GetDouble() : null));
         }
 
         if (candles.Count > 1 && candles[^1].Time.Second != 0 && candles[^1].Volume == 0)

@@ -3,6 +3,7 @@ using Trader.Core.Agender;
 using Trader.Core.Analysis;
 using Trader.Core.Learning;
 using Trader.Core.Projection;
+using Trader.Core.Rotation;
 using Trader.Core.Alerts;
 using Trader.Core.Backtesting;
 using Trader.Core.Charts;
@@ -598,6 +599,25 @@ public sealed class TraderApiClient(HttpClient httpClient)
 
         return response.IsSuccessStatusCode
             ? (await response.Content.ReadFromJsonAsync<BacktestResult>(cancellationToken), null)
+            : (null, await ApiError.ReadAsync(response));
+    }
+
+    public async Task<RotationResult?> GetLastRotationAsync(CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.GetAsync("api/rotation/last", cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return response.StatusCode == System.Net.HttpStatusCode.NoContent
+            ? null
+            : await response.Content.ReadFromJsonAsync<RotationResult>(cancellationToken);
+    }
+
+    public async Task<(RotationResult? Result, string? Error)> RunRotationAsync(CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsync("api/rotation", null, cancellationToken);
+
+        return response.IsSuccessStatusCode
+            ? (await response.Content.ReadFromJsonAsync<RotationResult>(cancellationToken), null)
             : (null, await ApiError.ReadAsync(response));
     }
 

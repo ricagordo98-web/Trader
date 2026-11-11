@@ -1,0 +1,203 @@
+@page "/rotation"
+@using System.Globalization
+@implements IDisposable
+@inject TraderApiClient Api
+
+<PageTitle>Rotação de ETFs · Trader</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6 page-fade">
+    <MudText Typo="Typo.h5" Class="mb-1">Rotação de ETFs</MudText>
+    <MudText Typo="Typo.body2" Class="symbol-name mb-4">
+        Estratégias de ritmo mensal e custos baixos, com técnicas documentadas há décadas (momentum e tendência), testadas contra comprar e manter o SPY. Ao contrário das sugestões a curto prazo, aqui a vantagem, se existir, não é comida pelos custos. Os parâmetros são os habituais e foram fixados antes de ver o resultado.
+    </MudText>
+
+    <div class="d-flex align-center gap-3 mb-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_running" OnClick="RunAsync" StartIcon="@Icons.Material.Filled.PlayArrow">Executar teste</MudButton>
+        @if (_running)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            <MudText Typo="Typo.caption" Class="symbol-name">A descarregar o histórico de 15 ETFs e a calcular. Pode demorar um minuto.</MudText>
+        }
+        else if (_result is not null)
+        {
+            <MudText Typo="Typo.caption" Class="symbol-name">Último teste: @_result.GeneratedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm", Pt) · de @_result.From.ToString("MM/yyyy", Pt) a @_result.To.ToString("MM/yyyy", Pt) (@_result.Months meses)</MudText>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_error</MudAlert>
+    }
+
+    @if (_result is { } result)
+    {
+        RotationStrategyResult spy = result.Strategies.First(s => s.Key == "spy");
+
+        <MudGrid Spacing="3" Class="mb-4">
+            @foreach (RotationStrategyResult strategy in result.Strategies.Where(s => !s.IsBenchmark))
+            {
+                <MudItem xs="12" md="4">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-4 h-100">
+                        <div class="d-flex align-center gap-2 mb-1">
+                            <MudText Typo="Typo.subtitle1" Class="flex-grow-1">@strategy.Name</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@VerdictColor(strategy.Verdict)" Class="ma-0">@VerdictLabel(strategy.Verdict)</MudChip>
+                        </div>
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">@strategy.Description</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-1"><strong>Posição atual</strong> (para o mês que começa):</MudText>
+                        @if (strategy.CurrentHoldings.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2">Tudo em dinheiro (nenhum ativo passa o filtro).</MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (RotationHolding holding in strategy.CurrentHoldings)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0">@holding.Symbol @((holding.Weight * 100).ToString("0", Pt))%</MudChip>
+                                }
+                            </div>
+                        }
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block mt-3">
+                            Retorno anual @Percent(strategy.Stats.Cagr) contra @Percent(spy.Stats.Cagr) do SPY. Pior queda @Percent(strategy.Stats.MaxDrawdown) contra @Percent(spy.Stats.MaxDrawdown).
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+
+        <MudPaper Elevation="0" Outlined="true" Class="mb-4">
+            <MudTable Items="result.Strategies" Dense="true" Elevation="0" Hover="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Estratégia</MudTh>
+                    <MudTh Style="text-align:right">Retorno anual</MudTh>
+                    <MudTh Style="text-align:right">Volatilidade</MudTh>
+                    <MudTh Style="text-align:right">Sharpe</MudTh>
+                    <MudTh Style="text-align:right">Pior queda</MudTh>
+                    <MudTh Style="text-align:right">Meses positivos</MudTh>
+                    <MudTh Style="text-align:right">Rotação mensal</MudTh>
+                    <MudTh Style="text-align:right">Sharpe 1.ª / 2.ª metade</MudTh>
+                    <MudTh Style="text-align:right">Retorno com custos ×@RotationEngine.HighCostMultiplier.ToString("0", Pt)</MudTh>
+                    <MudTh Style="text-align:right">Excesso vs SPY (t)</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd Style="text-align:right">@Percent(context.Stats.Cagr)</MudTd>
+                    <MudTd Style="text-align:right">@Percent(context.Stats.Volatility)</MudTd>
+                    <MudTd Style="text-align:right">@context.Stats.Sharpe.ToString("0.00", Pt)</MudTd>
+                    <MudTd Style="text-align:right">@Percent(context.Stats.MaxDrawdown)</MudTd>
+                    <MudTd Style="text-align:right">@Percent(context.Stats.PositiveMonthsShare)</MudTd>
+                    <MudTd Style="text-align:right">@Percent(context.Stats.AverageTurnover)</MudTd>
+                    <MudTd Style="text-align:right">@context.FirstHalfSharpe.ToString("0.00", Pt) / @context.SecondHalfSharpe.ToString("0.00", Pt)</MudTd>
+                    <MudTd Style="text-align:right">@(context.IsBenchmark ? "-" : Percent(context.CagrWithHighCosts))</MudTd>
+                    <MudTd Style="text-align:right">@(context.ExcessTStat is { } t ? $"{(context.ExcessCagr ?? 0) * 100:+0.0;-0.0}% ({t.ToString("+0.0;-0.0", Pt)})" : "-")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <MudPaper Elevation="0" Outlined="true" Class="mb-4">
+            <div class="pa-4 pb-0">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Retorno por ano</MudText>
+            </div>
+            <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto">
+                <thead>
+                    <tr>
+                        <th>Ano</th>
+                        @foreach (RotationStrategyResult strategy in result.Strategies)
+                        {
+                            <th style="text-align:right">@strategy.Name</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (int year in result.Strategies.SelectMany(s => s.YearlyReturns.Keys).Distinct().Order())
+                    {
+                        <tr>
+                            <td>@year</td>
+                            @foreach (RotationStrategyResult strategy in result.Strategies)
+                            {
+                                <td style="text-align:right">@(strategy.YearlyReturns.TryGetValue(year, out double value) ? Percent(value) : "-")</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Como ler isto</MudText>
+            <ul class="about-list">
+                <li><strong>Melhor que o SPY</strong>: melhor Sharpe (retorno por unidade de risco) no período todo, nas duas metades e com custos 5 vezes mais altos, e com um excesso estatisticamente significativo (t ≥ 2).</li>
+                <li><strong>Menos risco</strong>: não rende mais, mas a pior queda é pelo menos 25% menor e o Sharpe fica perto do do SPY. É útil para quem não aguenta quedas grandes.</li>
+                <li><strong>Sem vantagem</strong>: não cumpre nenhum dos critérios acima.</li>
+                @foreach (string note in result.Notes)
+                {
+                    <li>@note</li>
+                }
+            </ul>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private readonly CancellationTokenSource _cts = new();
+    private RotationResult? _result;
+    private string? _error;
+    private bool _running;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _result = await Api.GetLastRotationAsync(_cts.Token);
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível carregar o último teste. Verifica se o servidor está a correr.";
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        _error = null;
+
+        try
+        {
+            (RotationResult? result, string? error) = await Api.RunRotationAsync(_cts.Token);
+            _result = result ?? _result;
+            _error = error;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _error = "O teste não terminou. Verifica se o servidor está a correr e tenta de novo.";
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private static string Percent(double value) => (value * 100).ToString("0.0", Pt) + "%";
+
+    private static string VerdictLabel(string verdict) => verdict switch
+    {
+        RotationVerdicts.Better => "Melhor que o SPY",
+        RotationVerdicts.LessRisk => "Menos risco",
+        _ => "Sem vantagem"
+    };
+
+    private static Color VerdictColor(string verdict) => verdict switch
+    {
+        RotationVerdicts.Better => Color.Success,
+        RotationVerdicts.LessRisk => Color.Info,
+        _ => Color.Default
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
