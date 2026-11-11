@@ -159,4 +159,19 @@ public class TradingTermsTests
     [InlineData("Short (sell short)")]
     public void Glossary_CoversTheTermsTheUserAskedAbout(string english) =>
         TradingTerms.Terms.Should().Contain(t => t.English == english);
+
+    [Theory]
+    [InlineData("Liquidity pool")]
+    [InlineData("Fair Value Gap (FVG)")]
+    [InlineData("Order block (OB)")]
+    [InlineData("Break of structure (BOS)")]
+    [InlineData("Kill zone")]
+    [InlineData("Power of Three (PO3 / AMD)")]
+    [InlineData("Optimal trade entry (OTE)")]
+    [InlineData("Premium and discount arrays (PD arrays)")]
+    public void Glossary_CoversTheIctConceptsTheUserAskedAbout(string english)
+    {
+        TradingTerms.Terms.Should().Contain(t => t.English == english && t.Category == TradingTerms.SmartMoney);
+        LearningCatalog.Lessons.Should().Contain(l => l.Id == "ict-smart-money");
+    }
 }

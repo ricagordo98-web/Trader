@@ -123,7 +123,24 @@ public static class LearningCatalog
                 "Rever o diário todas as semanas é o hábito com mais retorno para a maioria dos traders."
             ],
             "A Carteira guarda as tuas trades com setup, etiquetas e emoção.",
-            "/journal")
+            "/journal"),
+        new(
+            "ict-smart-money",
+            "Conceitos ICT / Smart Money",
+            "Análise técnica",
+            "Vocabulário muito usado por traders de retalho: liquidez, FVG, order blocks, estrutura e entradas em Fibonacci. Serve para ler o gráfico, mas não está provado que dá vantagem.",
+            [
+                "A ideia de fundo: grandes instituições precisam de liquidez para entrar, e essa liquidez está onde se acumulam stops, acima de máximos e abaixo de mínimos evidentes. O preço seria empurrado para essas zonas antes de seguir o movimento verdadeiro.",
+                "Liquidez: máximos e mínimos de oscilação que o preço ainda não tocou. No gráfico, aparecem como linhas a tracejado. Quando o preço as ultrapassa e volta, fala-se em varredura (sweep).",
+                "Fair Value Gap (FVG): três velas seguidas em que o pavio da 1.ª e o da 3.ª não se tocam. A zona entre eles é o gap. Diz-se que o preço tende a voltar para a preencher. Um gap fica inválido quando o preço fecha para lá dele.",
+                "Order block: a última vela contrária antes de um movimento forte que quebra a estrutura. Marca a zona onde, em teoria, houve ordens grandes. Tal como o FVG, deixa de contar quando o preço fecha para lá dela.",
+                "Estrutura: BOS (quebra de estrutura) é o preço fechar para lá do último swing high ou low a favor da tendência. MSS (ou CHoCH) é quebrar no sentido contrário, o que pode sinalizar inversão.",
+                "Premium e discount: divide-se o último impulso ao meio. Acima de 50% é caro (premium), abaixo é barato (discount). A OTE (entrada ótima) é a zona de retração entre 62% e 79%, para entrar a favor da tendência depois de um recuo.",
+                "Kill zones (aberturas de Londres e Nova Iorque) e Power of Three (acumulação, manipulação, distribuição) dependem do horário e da interpretação, por isso a app não os desenha. Existem no glossário para entenderes a linguagem.",
+                "Aviso importante: estes conceitos são subjetivos (qual é a «última vela contrária»?), quase sempre vistos depois de o movimento ter acontecido, e vendidos sobretudo em cursos. Não encontrámos estudos independentes que mostrem vantagem depois de custos. Usa-os para aprender a linguagem e para marcar zonas de decisão, sempre com stop e risco definidos."
+            ],
+            "No gráfico de qualquer ativo, abre o menu ICT para ligar ou desligar cada conceito. É opcional, está desligado por defeito e só marca zonas calculadas a partir das velas visíveis.",
+            "/trading")
     ];
 
     public static IReadOnlyList<RecommendedResource> Resources { get; } =

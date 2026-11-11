@@ -112,6 +112,14 @@
         }
     }
 
+    public async Task SetSmartMoneyAsync(IReadOnlyList<ChartZone> zones)
+    {
+        if (_module is not null && _created)
+        {
+            await _module.InvokeVoidAsync("setSmartMoney", _id, zones);
+        }
+    }
+
     public async Task SetKindAsync(string kind)
     {
         if (_module is not null)

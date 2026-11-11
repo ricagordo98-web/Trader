@@ -65,6 +65,12 @@
                         <MudMenuItem OnClick="@(() => ToggleLevelGroupAsync(group))">@(_levelGroups.Contains(group) ? "✓ " : "    ")@label</MudMenuItem>
                     }
                 </MudMenu>
+                <MudMenu Label="ICT" StartIcon="@Icons.Material.Filled.Layers" Size="Size.Small" Variant="Variant.Text" Dense="true">
+                    @foreach ((string group, string label) in SmartMoneyOptions)
+                    {
+                        <MudMenuItem OnClick="@(() => ToggleSmartMoneyAsync(group))">@(_smartMoneyGroups.Contains(group) ? "✓ " : "    ")@label</MudMenuItem>
+                    }
+                </MudMenu>
                 <MudMenu Label="Eventos" StartIcon="@Icons.Material.Filled.Flag" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @foreach ((string kind, string label) in EventKinds)
                     {
@@ -362,6 +368,11 @@
         if (_ready && _chart is not null && !_configApplied)
         {
             await ApplyStoredIndicatorConfigAsync();
+        }
+
+        if (_smartMoneyGroups.Count > 0)
+        {
+            await RefreshSmartMoneyAsync();
         }
     }
 

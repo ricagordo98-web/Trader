@@ -16,6 +16,7 @@ let rectangleRegistered = false;
 let extrasRegistered = false;
 let compareRegistered = false;
 let projectionRegistered = false;
+let zoneRegistered = false;
 
 const baseOverlay = {
     needDefaultPointFigure: true,
@@ -776,6 +777,70 @@ export function setLevels(id, levels) {
 
         if (overlayId) {
             state.levelIds.push(overlayId);
+        }
+    }
+}
+
+function registerZone() {
+    if (zoneRegistered) {
+        return;
+    }
+
+    window.klinecharts.registerOverlay({
+        name: 'smartMoneyZone',
+        totalStep: 3,
+        lock: true,
+        needDefaultPointFigure: false,
+        needDefaultXAxisFigure: false,
+        needDefaultYAxisFigure: false,
+        createPointFigures: ({ overlay, coordinates, bounding }) => {
+            if (coordinates.length < 2) {
+                return [];
+            }
+
+            const { color, label, extend } = overlay.extendData;
+            const [a, b] = coordinates;
+            const left = Math.min(a.x, b.x);
+            const right = extend ? bounding.width : Math.max(a.x, b.x);
+            const figures = [];
+
+            if (Math.abs(a.y - b.y) < 1.5) {
+                figures.push({ type: 'line', attrs: { coordinates: [{ x: left, y: a.y }, { x: right, y: a.y }] }, styles: { style: 'dashed', dashedValue: [5, 4], color, size: 1 } });
+            } else {
+                figures.push({
+                    type: 'rect',
+                    attrs: { x: left, y: Math.min(a.y, b.y), width: Math.max(1, right - left), height: Math.abs(a.y - b.y) },
+                    styles: { style: 'stroke_fill', color: color + '26', borderColor: color, borderSize: 1 }
+                });
+            }
+
+            figures.push({ type: 'text', attrs: { x: left + 4, y: Math.min(a.y, b.y) - 2, text: label, baseline: 'bottom' }, styles: { color, size: 10, backgroundColor: 'transparent', borderSize: 0 } });
+            return figures;
+        }
+    });
+
+    zoneRegistered = true;
+}
+
+export function setSmartMoney(id, zones) {
+    const state = charts.get(id);
+    registerZone();
+
+    for (const zoneId of state.zoneIds ?? []) {
+        state.chart.removeOverlay({ id: zoneId });
+    }
+    state.zoneIds = [];
+
+    for (const zone of zones) {
+        const overlayId = state.chart.createOverlay({
+            name: 'smartMoneyZone',
+            points: [{ timestamp: zone.from, value: zone.high }, { timestamp: zone.to, value: zone.low }],
+            lock: true,
+            extendData: { color: zone.color, label: zone.label, extend: zone.extendRight }
+        });
+
+        if (overlayId) {
+            state.zoneIds.push(overlayId);
         }
     }
 }

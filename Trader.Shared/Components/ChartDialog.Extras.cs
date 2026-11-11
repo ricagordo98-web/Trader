@@ -42,6 +42,15 @@ public partial class ChartDialog
         (AutoLevelGroups.Swing, "Suporte e resistência")
     ];
 
+    private static readonly (string Group, string Label)[] SmartMoneyOptions =
+    [
+        (SmartMoneyGroups.FairValueGaps, "Fair Value Gaps"),
+        (SmartMoneyGroups.OrderBlocks, "Order Blocks"),
+        (SmartMoneyGroups.Liquidity, "Liquidez (máx./mín. por tocar)"),
+        (SmartMoneyGroups.Structure, "Estrutura (BOS / MSS)"),
+        (SmartMoneyGroups.PremiumDiscount, "Premium/Discount e OTE")
+    ];
+
     private static readonly (string Kind, string Label)[] EventKinds =
     [
         ("news", "Notícias"),
@@ -52,6 +61,9 @@ public partial class ChartDialog
 
     private readonly HashSet<string> _levelGroups = [];
     private readonly HashSet<string> _eventKinds = [];
+    private readonly HashSet<string> _smartMoneyGroups = [];
+    private IReadOnlyList<Candle>? _smartMoneyCandles;
+    private HashSet<string>? _smartMoneyApplied;
     private readonly Dictionary<string, IndicatorSettingsDialog.Result> _indicatorConfigs = [];
     private IReadOnlyList<AutoLevel> _autoLevels = [];
     private IReadOnlyList<ChartLevel> _allLevels = [];
@@ -196,6 +208,52 @@ public partial class ChartDialog
 
         RebuildLevels();
     }
+
+    private async Task ToggleSmartMoneyAsync(string group)
+    {
+        if (!_smartMoneyGroups.Add(group))
+        {
+            _smartMoneyGroups.Remove(group);
+        }
+
+        _smartMoneyApplied = null;
+        await RefreshSmartMoneyAsync();
+    }
+
+    private async Task RefreshSmartMoneyAsync()
+    {
+        if (_chart is null || !_ready)
+        {
+            return;
+        }
+
+        string signature = string.Join('|', _smartMoneyGroups.Order());
+
+        if (ReferenceEquals(_smartMoneyCandles, _candles) && _smartMoneyApplied is not null && string.Join('|', _smartMoneyApplied.Order()) == signature)
+        {
+            return;
+        }
+
+        _smartMoneyCandles = _candles;
+        _smartMoneyApplied = [.. _smartMoneyGroups];
+
+        List<ChartZone> zones = _smartMoneyGroups.Count == 0
+            ? []
+            : SmartMoneyDetector.Detect(_candles)
+                .Where(i => _smartMoneyGroups.Contains(i.Group))
+                .Select(i => new ChartZone(i.From.ToUnixTimeMilliseconds(), i.To.ToUnixTimeMilliseconds(), i.High, i.Low, i.Label, SmartMoneyColor(i), i.ExtendRight))
+                .ToList();
+
+        await _chart.SetSmartMoneyAsync(zones);
+    }
+
+    private static string SmartMoneyColor(SmartMoneyItem item) => item.Group switch
+    {
+        SmartMoneyGroups.Liquidity => "#F59E0B",
+        SmartMoneyGroups.Structure => item.Bullish ? "#38BDF8" : "#A78BFA",
+        SmartMoneyGroups.PremiumDiscount => item.Label.StartsWith("OTE", StringComparison.Ordinal) ? "#A78BFA" : "#9CA3AF",
+        _ => item.Bullish ? "#22C55E" : "#EF4444"
+    };
 
     private async Task ToggleEventKindAsync(string kind)
     {
