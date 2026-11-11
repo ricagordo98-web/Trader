@@ -171,6 +171,16 @@ export function setProjection(id, kind, history, bars, bands, levels) {
         styles: { line: { color: '#F59E0B', style: 'dashed', dashedValue: [6, 4], size: 1 } }
     });
 
+    const end = bands[bands.length - 1];
+    const percent = value => `${value >= lastPast.close ? '+' : ''}${((value / lastPast.close - 1) * 100).toFixed(2)}%`;
+    state.projectionLabelIds = [end.p90, end.p10].map(value => state.chart.createOverlay({
+        name: 'simpleAnnotation',
+        points: [{ timestamp: Date.parse(end.time), value }],
+        extendData: percent(value),
+        lock: true,
+        styles: { line: { color: '#F59E0B' }, text: { color: '#F59E0B' } }
+    }));
+
     setLevels(id, levels ?? []);
 }
 
@@ -185,6 +195,14 @@ export function clearProjection(id) {
     if (state?.projectionLineId) {
         state.chart.removeOverlay({ id: state.projectionLineId });
         state.projectionLineId = null;
+    }
+
+    for (const labelId of state?.projectionLabelIds ?? []) {
+        state.chart.removeOverlay({ id: labelId });
+    }
+
+    if (state) {
+        state.projectionLabelIds = [];
     }
 }
 

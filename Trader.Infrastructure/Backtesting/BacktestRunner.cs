@@ -46,6 +46,7 @@ public static class BacktestRunner
         List<BacktestTrade> strategy = [];
         List<BacktestTrade> baseline = [];
         List<double> buyAndHold = [];
+        List<ResearchSample> research = [];
         DateTimeOffset from = DateTimeOffset.MaxValue;
         DateTimeOffset to = DateTimeOffset.MinValue;
         int tested = 0;
@@ -103,6 +104,11 @@ public static class BacktestRunner
                             Vix = vixLookup?.CloseAtOrBefore(candles[i].Time)
                         }
                         : snapshot with { Adx = null, WeeklyTrend = null };
+                }
+
+                if (snapshot is not null && (i - WarmupBars) % ResearchStride == 0)
+                {
+                    CollectResearch(research, engine, history, candles, i, snapshot, scoring, request.Costs);
                 }
 
                 SentimentSnapshot sentiment = rows is null ? NoSentiment : SentimentAt(rows, candles[i].Time, scoring);
@@ -164,7 +170,35 @@ public static class BacktestRunner
             BacktestStatistics.Evaluate(strategyStats, baselineStats, firstHalf, secondHalf),
             BuildNotes(useSentiment, sentimentFrom, to, useContext),
             useSentiment,
-            useContext);
+            useContext,
+            FeatureEdgeAnalyzer.Analyze(research, ResearchFeatures.Labels),
+            BacktestRobustnessCalculator.Calculate(strategy));
+    }
+
+    private const int ResearchStride = 10;
+
+    private static void CollectResearch(
+        List<ResearchSample> research,
+        SuggestionEngine engine,
+        SymbolHistory history,
+        IReadOnlyList<Candle> candles,
+        int index,
+        MarketSnapshot snapshot,
+        ScoringOptions scoring,
+        CostModel costs)
+    {
+        double score = engine.ScoreSignals(snapshot, NoSentiment).Score;
+
+        foreach (TradeDirection direction in new[] { TradeDirection.Buy, TradeDirection.Sell })
+        {
+            (double stopLoss, double takeProfit) = engine.ComputeLevels(snapshot, direction);
+            Simulated? simulated = Simulate(history, candles, index, direction, stopLoss, takeProfit, scoring, costs);
+
+            if (simulated is not null)
+            {
+                research.Add(new ResearchSample(history.Symbol, history.AssetClass, candles[index].Time, direction, simulated.Trade.NetR, ResearchFeatures.From(snapshot, direction, score)));
+            }
+        }
     }
 
     private const int SentimentWarmupDays = 3;

@@ -88,4 +88,6 @@ public sealed record BacktestResult(
     BacktestVerdict Verdict,
     IReadOnlyList<string> Notes,
     bool UsedSentiment = false,
-    bool UsedMarketContext = false);
+    bool UsedMarketContext = false,
+    FeatureResearch? Research = null,
+    BacktestRobustness? Robustness = null);

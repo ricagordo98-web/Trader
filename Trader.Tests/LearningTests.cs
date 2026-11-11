@@ -126,3 +126,37 @@ public class LearningServiceTests : IAsyncLifetime
         (await _service.DeleteAsync(item.Id, CancellationToken.None)).Should().BeFalse();
     }
 }
+
+public class LearningCatalogTests
+{
+    [Fact]
+    public void Catalog_HasUniqueLessonsAndValidHttpsResources()
+    {
+        LearningCatalog.Lessons.Select(l => l.Id).Should().OnlyHaveUniqueItems();
+        LearningCatalog.Lessons.Should().OnlyContain(l => l.Paragraphs.Count > 0 && l.Title.Length > 0);
+        LearningCatalog.Resources.Select(r => r.Url).Should().OnlyHaveUniqueItems();
+        LearningCatalog.Resources.Should().OnlyContain(r => r.Url.StartsWith("https://") && r.Title.Length <= LearningRules.MaxTitleLength && r.Category.Length <= LearningRules.MaxCategoryLength);
+        LearningCatalog.Resources.Should().OnlyContain(r => LearningRules.ValidateLink(new AddLearningLinkRequest(r.Title, r.Url, r.Category)).Count == 0);
+    }
+}
+
+public class TradingTermsTests
+{
+    [Fact]
+    public void Glossary_HasUniqueCompleteBilingualTerms()
+    {
+        TradingTerms.Terms.Select(t => t.English).Should().OnlyHaveUniqueItems();
+        TradingTerms.Terms.Should().OnlyContain(t =>
+            t.English.Length > 0 && t.Portuguese.Length > 0 && t.DefinitionPt.Length > 10 && t.DefinitionEn.Length > 10 && t.Category.Length > 0);
+    }
+
+    [Theory]
+    [InlineData("Margin call")]
+    [InlineData("Call option")]
+    [InlineData("Stock / Share")]
+    [InlineData("Leverage")]
+    [InlineData("Put option")]
+    [InlineData("Short (sell short)")]
+    public void Glossary_CoversTheTermsTheUserAskedAbout(string english) =>
+        TradingTerms.Terms.Should().Contain(t => t.English == english);
+}

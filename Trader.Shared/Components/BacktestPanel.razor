@@ -169,6 +169,93 @@ else
         </MudTable>
     </MudPaper>
 
+    @if (r.Robustness is { } robustness)
+    {
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4 h-100">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Por ano</MudText>
+                    @foreach (BacktestGroup year in robustness.ByYear)
+                    {
+                        <div class="d-flex py-1">
+                            <MudText Typo="Typo.body2">@year.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="symbol-name ml-2">@year.Stats.Trades</MudText>
+                            <MudSpacer />
+                            <MudText Typo="Typo.body2" Color="@(year.Stats.AverageNetR >= 0 ? Color.Success : Color.Error)">@Signed(year.Stats.AverageNetR) R</MudText>
+                        </div>
+                    }
+                    <MudText Typo="Typo.caption" Class="symbol-name mt-2">R líquido médio por operação, pelo ano de entrada. Se só alguns anos ganham, o resultado depende do período.</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4 h-100">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">E se os custos forem diferentes?</MudText>
+                    @foreach (CostScenario scenario in robustness.CostScenarios)
+                    {
+                        <div class="d-flex py-1">
+                            <MudText Typo="Typo.body2">Custos ×@scenario.Multiplier.ToString("0.#", CultureInfo.GetCultureInfo("pt-PT"))</MudText>
+                            <MudSpacer />
+                            <MudText Typo="Typo.caption" Class="symbol-name mr-2">@Signed(scenario.Stats.ConfidenceLow) a @Signed(scenario.Stats.ConfidenceHigh)</MudText>
+                            <MudText Typo="Typo.body2" Color="@(scenario.Stats.AverageNetR >= 0 ? Color.Success : Color.Error)">@Signed(scenario.Stats.AverageNetR) R</MudText>
+                        </div>
+                    }
+                    <MudText Typo="Typo.caption" Class="symbol-name mt-2">O custo real da tua corretora (spread, comissão, financiamento, derrapagem) pode ser diferente do assumido. Se o resultado fica negativo com custos ligeiramente mais altos, não é fiável.</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4 h-100">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">Sem criptomoedas</MudText>
+                    <div class="d-flex py-1">
+                        <MudText Typo="Typo.body2">R líquido médio</MudText>
+                        <MudText Typo="Typo.caption" Class="symbol-name ml-2">@robustness.WithoutCrypto.Trades</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.body2" Color="@(robustness.WithoutCrypto.AverageNetR >= 0 ? Color.Success : Color.Error)">@Signed(robustness.WithoutCrypto.AverageNetR) R</MudText>
+                    </div>
+                    <div class="d-flex py-1"><MudText Typo="Typo.body2">Intervalo de confiança</MudText><MudSpacer /><MudText Typo="Typo.body2">@Signed(robustness.WithoutCrypto.ConfidenceLow) a @Signed(robustness.WithoutCrypto.ConfidenceHigh)</MudText></div>
+                    <MudText Typo="Typo.caption" Class="symbol-name mt-2">As criptomoedas têm custos mais altos e um histórico muito favorável. Ver o resultado sem elas mostra se a vantagem depende delas.</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+
+    @if (r.Research is { Edges.Count: > 0 } research)
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="mb-4">
+            <div class="pa-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Investigação: o que prevê o resultado?</MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name">
+                    @research.Samples.ToString("N0", CultureInfo.GetCultureInfo("pt-PT")) entradas hipotéticas (R líquido médio @Signed(research.AverageNetR)). Mede se cada característica está ligada ao resultado, em ordem de força. "Topo" e "fundo" são o R líquido médio dos 20% de entradas com a característica mais alta e mais baixa.
+                </MudText>
+            </div>
+            <MudTable Items="research.Edges" Dense="true" Elevation="0" Hover="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Característica</MudTh>
+                    <MudTh Style="text-align:right">Correlação</MudTh>
+                    <MudTh Style="text-align:right">z</MudTh>
+                    <MudTh Style="text-align:right">Topo</MudTh>
+                    <MudTh Style="text-align:right">Fundo</MudTh>
+                    <MudTh Style="text-align:right">Anos coerentes</MudTh>
+                    <MudTh>Veredito</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Label</MudTd>
+                    <MudTd Style="text-align:right">@Signed(context.Correlation)</MudTd>
+                    <MudTd Style="text-align:right">@context.ZScore.ToString("+0.0;-0.0;0.0", CultureInfo.GetCultureInfo("pt-PT"))</MudTd>
+                    <MudTd Style="text-align:right">@Signed(context.TopNetR) R</MudTd>
+                    <MudTd Style="text-align:right">@Signed(context.BottomNetR) R</MudTd>
+                    <MudTd Style="text-align:right">@context.ConsistentYears/@context.Years</MudTd>
+                    <MudTd><MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@EdgeColor(context.Verdict)" Class="ma-0">@EdgeLabel(context.Verdict)</MudChip></MudTd>
+                </RowTemplate>
+            </MudTable>
+            <ul class="about-list pa-4">
+                @foreach (string note in research.Notes)
+                {
+                    <li>@note</li>
+                }
+            </ul>
+        </MudPaper>
+    }
+
     <MudPaper Elevation="0" Outlined="true" Class="pa-4">
         <MudText Typo="Typo.subtitle1" Class="mb-2">Limitações a ter em conta</MudText>
         <ul class="about-list">
@@ -268,6 +355,20 @@ else
 
     private static IReadOnlyList<BacktestGroup> Comparison(BacktestResult r) =>
         [new BacktestGroup("Motor de sugestões", r.Strategy), new BacktestGroup("Direção aleatória (mesmos dias)", r.Baseline)];
+
+    private static Color EdgeColor(string verdict) => verdict switch
+    {
+        FeatureEdgeAnalyzer.VerdictPossible => Color.Success,
+        FeatureEdgeAnalyzer.VerdictWeak => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string EdgeLabel(string verdict) => verdict switch
+    {
+        FeatureEdgeAnalyzer.VerdictPossible => "Possível",
+        FeatureEdgeAnalyzer.VerdictWeak => "Fraco",
+        _ => "Sem sinal"
+    };
 
     private static Severity VerdictSeverity(string code) => code switch
     {

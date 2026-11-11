@@ -24,6 +24,7 @@ public static class ProjectionEngine
     private const int AnalogNeighbours = 30;
     private const int MinAnalogs = 12;
     private const int TypicalPathPool = 200;
+    private const int BootstrapBlock = 6;
 
     private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
 
@@ -80,14 +81,23 @@ public static class ProjectionEngine
         double logVwap = Math.Log(vwap);
         double cap = MaxDriftInSigmas * residuals.Sigma;
 
+        int available = residuals.Standardized.Length;
+        int block = Math.Min(BootstrapBlock, available);
+
         for (int p = 0; p < simulations; p++)
         {
             double logPrice = Math.Log(last.Close);
+            int blockStart = 0;
 
             for (int s = 0; s < steps; s++)
             {
+                if (s % block == 0)
+                {
+                    blockStart = random.Next(available - block + 1);
+                }
+
                 double drift = Math.Clamp(momentumPerStep - ReversionPerStep * (logPrice - logVwap) + learnedDrift[s], -cap, cap);
-                double epsilon = residuals.Standardized[random.Next(residuals.Standardized.Length)];
+                double epsilon = residuals.Standardized[blockStart + s % block];
                 logPrice += drift + stepSigma[s] * epsilon;
                 closes[s][p] = Math.Exp(logPrice);
             }
@@ -309,7 +319,7 @@ public static class ProjectionEngine
                 learned.AnalogEffect),
             new ProjectionDriver(
                 "Caudas gordas",
-                $"Os choques são reamostrados dos retornos reais do ativo (simulação histórica filtrada), por isso movimentos grandes são mais frequentes do que numa curva normal (curtose {residuals.Kurtosis.ToString("0.#", Pt)}; 3 seria normal). A deriva está limitada a ±{(cap * 100).ToString("0.###", Pt)}% por vela para a direção nunca dominar o ruído.",
+                $"Os choques são reamostrados dos retornos reais do ativo em blocos de {BootstrapBlock * StepMinutes} min seguidos (simulação histórica filtrada em blocos), o que mantém a persistência própria do ativo: se ele costuma inverter, o leque fecha; se costuma continuar, abre. Movimentos grandes são mais frequentes do que numa curva normal (curtose {residuals.Kurtosis.ToString("0.#", Pt)}; 3 seria normal). A deriva está limitada a ±{(cap * 100).ToString("0.###", Pt)}% por vela para a direção nunca dominar o ruído.",
                 null)
         ];
     }

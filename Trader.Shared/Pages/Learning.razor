@@ -11,10 +11,102 @@
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6 page-fade">
     <MudText Typo="Typo.h5" Class="mb-1">Learning</MudText>
     <MudText Typo="Typo.body2" Class="symbol-name mb-4">
-        A tua biblioteca de estudo: PDFs guardados no servidor e ligações para fóruns, sites de ajuda e artigos sobre técnicas de trading.
+        Lições escritas para a app, recursos recomendados e a tua biblioteca pessoal de PDFs e ligações. Conteúdo educativo, não é aconselhamento financeiro.
     </MudText>
 
-    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+    <MudTabs Rounded="true" Elevation="0" Class="mt-2">
+    <MudTabPanel Text="Lições">
+        <MudExpansionPanels MultiExpansion="true" Class="mt-4">
+            @foreach (LearningLesson lesson in LearningCatalog.Lessons)
+            {
+                <MudExpansionPanel>
+                    <TitleContent>
+                        <div class="d-flex align-center gap-2">
+                            <MudText Typo="Typo.subtitle2" Class="flex-grow-1">@lesson.Title</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0 tag-chip">@lesson.Category</MudChip>
+                        </div>
+                        <MudText Typo="Typo.caption" Class="symbol-name">@lesson.Summary</MudText>
+                    </TitleContent>
+                    <ChildContent>
+                        @foreach (string paragraph in lesson.Paragraphs)
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-2">@paragraph</MudText>
+                        }
+                        @if (lesson.AppHint is not null)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mt-2">
+                                @lesson.AppHint
+                                @if (lesson.AppLink is not null)
+                                {
+                                    <MudLink Href="@lesson.AppLink" Class="ml-1">Abrir</MudLink>
+                                }
+                            </MudAlert>
+                        }
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Glossário PT/EN">
+        <MudText Typo="Typo.body2" Class="symbol-name mt-4 mb-3">
+            @TradingTerms.Terms.Count termos e expressões de trading em português e inglês, com a definição nas duas línguas. Escreve em qualquer uma das línguas para filtrar.
+        </MudText>
+        <MudTextField T="string" @bind-Value="_glossaryText" Immediate="true" Placeholder="Filtrar: margin call, call, stop, spread..." Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" Class="mb-3" />
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <MudChip T="string" Size="Size.Small" Variant="@(_glossaryCategory is null ? Variant.Filled : Variant.Outlined)" OnClick="() => _glossaryCategory = null">Todas</MudChip>
+            @foreach (string category in TradingTerms.Terms.Select(t => t.Category).Distinct())
+            {
+                string current = category;
+                <MudChip T="string" Size="Size.Small" Variant="@(_glossaryCategory == current ? Variant.Filled : Variant.Outlined)" OnClick="() => _glossaryCategory = current">@current</MudChip>
+            }
+        </div>
+        @if (!VisibleTerms.Any())
+        {
+            <MudText Typo="Typo.body2" Class="symbol-name">Nenhum termo corresponde ao filtro.</MudText>
+        }
+        <MudGrid Spacing="3">
+            @foreach (TradingTerm term in VisibleTerms)
+            {
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100">
+                        <div class="d-flex align-center gap-2 mb-1">
+                            <MudText Typo="Typo.subtitle2" Class="flex-grow-1">@term.English</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0 tag-chip">@term.Category</MudChip>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mb-2"><strong>@term.Portuguese</strong></MudText>
+                        <MudText Typo="Typo.body2"><span class="symbol-name">PT</span> @term.DefinitionPt</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1"><span class="symbol-name">EN</span> @term.DefinitionEn</MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Recomendados">
+        @foreach (IGrouping<string, RecommendedResource> group in LearningCatalog.Resources.GroupBy(r => r.Category))
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2">@group.Key</MudText>
+            <MudGrid Spacing="3">
+                @foreach (RecommendedResource resource in group)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudPaper Elevation="0" Outlined="true" Class="pa-3 h-100 d-flex flex-column gap-1">
+                            <MudText Typo="Typo.subtitle2">@resource.Title</MudText>
+                            <MudText Typo="Typo.caption" Class="symbol-name">@resource.Description</MudText>
+                            <div class="d-flex gap-2 mt-auto pt-2">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@resource.Url" Target="_blank" StartIcon="@Icons.Material.Filled.OpenInNew">Abrir</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="@(IsSaved(resource.Url) || _busy)" OnClick="() => SaveResourceAsync(resource)">@(IsSaved(resource.Url) ? "Guardado" : "Guardar na biblioteca")</MudButton>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudTabPanel>
+
+    <MudTabPanel Text="A minha biblioteca">
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4 mt-4">
         <MudText Typo="Typo.subtitle1" Class="mb-2">Adicionar</MudText>
         @if (_error is not null)
         {
@@ -99,6 +191,8 @@
             }
         </MudGrid>
     }
+    </MudTabPanel>
+    </MudTabs>
 </MudContainer>
 
 @code {
@@ -149,7 +243,34 @@
         }
     }
 
+    private string? _glossaryText;
+    private string? _glossaryCategory;
+
+    private IEnumerable<TradingTerm> VisibleTerms => TradingTerms.Terms
+        .Where(t => _glossaryCategory is null || t.Category == _glossaryCategory)
+        .Where(t => string.IsNullOrWhiteSpace(_glossaryText) || GlossaryMatches(t, _glossaryText.Trim()));
+
+    private static bool GlossaryMatches(TradingTerm term, string text) =>
+        new[] { term.English, term.Portuguese, term.DefinitionPt, term.DefinitionEn }
+            .Any(value => Pt.CompareInfo.IndexOf(value, text, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0);
+
     private void SetFilter(string? filter) => _filter = filter;
+
+    private bool IsSaved(string url) => _items.Any(i => string.Equals(i.Url, url, StringComparison.OrdinalIgnoreCase));
+
+    private async Task SaveResourceAsync(RecommendedResource resource)
+    {
+        _busy = true;
+        _error = await Api.AddLearningLinkAsync(new AddLearningLinkRequest(resource.Title, resource.Url, resource.Category), _cts.Token);
+
+        if (_error is null)
+        {
+            await ReloadAsync();
+            Snackbar.Add("Guardado na tua biblioteca.", Severity.Success);
+        }
+
+        _busy = false;
+    }
 
     private async Task AddLinkAsync()
     {
