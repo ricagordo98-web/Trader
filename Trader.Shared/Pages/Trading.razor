@@ -6,7 +6,7 @@
 <PageTitle>Trading · Trader</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6">
-    <div class="d-flex align-center mb-4 gap-4">
+    <div class="d-flex align-center flex-wrap mb-4 gap-3">
         <MudText Typo="Typo.h4">Trading</MudText>
         <MudSpacer />
         <MudTextField @bind-Value="_search" Immediate="true" Placeholder="Pesquisar símbolo ou nome" Variant="Variant.Outlined" Margin="Margin.Dense"
@@ -14,7 +14,7 @@
         <MudIconButton Icon="@Icons.Material.Filled.Refresh" Disabled="_loading" aria-label="Atualizar cotações" OnClick="LoadAsync" />
     </div>
     <MudText Typo="Typo.caption" Class="symbol-name d-block mb-3">
-        Fonte das cotações: @PriceSources.Yahoo (atualizadas a cada ~2 minutos, com atraso possível). O gráfico ao vivo usa Finnhub nos EUA e no forex e a Binance na cripto. Passa o rato sobre um preço para ver a fonte; o preço da tua corretora pode diferir ligeiramente.
+        Fonte das cotações: @PriceSources.Yahoo (atualizadas a cada ~2 minutos, com atraso possível). O gráfico ao vivo usa Finnhub nos EUA e no forex e a Binance na cripto. Abre um ativo e toca no ponto verde ao lado do gráfico (ou passa o rato sobre um preço) para ver a fonte; o preço da tua corretora pode diferir ligeiramente.
     </MudText>
 
     @if (_error is not null)

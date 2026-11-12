@@ -15,8 +15,12 @@
         <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" />
         <span>Carteira</span>
     </NavLink>
-    <NavLink class="bottom-nav-item" href="/settings">
-        <MudIcon Icon="@Icons.Material.Filled.Settings" />
-        <span>Config.</span>
-    </NavLink>
+    <button type="button" class="bottom-nav-item" aria-label="Abrir menu completo" @onclick="OnMore">
+        <MudIcon Icon="@Icons.Material.Filled.Menu" />
+        <span>Mais</span>
+    </button>
 </nav>
+
+@code {
+    [Parameter] public EventCallback OnMore { get; set; }
+}

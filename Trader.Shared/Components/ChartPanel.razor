@@ -14,12 +14,14 @@
                 <span>@symbol · @InstrumentName(symbol)</span>
             </ItemTemplate>
         </MudAutocomplete>
-        @for (int i = 0; i < Timeframes.Length; i++)
-        {
-            int index = i;
-            <MudButton Size="Size.Small" Variant="@(index == TimeframeIndex ? Variant.Filled : Variant.Text)" Color="@(index == TimeframeIndex ? Color.Primary : Color.Default)"
-                       OnClick="@(() => TimeframeChanged.InvokeAsync(index))">@Timeframes[index].Label</MudButton>
-        }
+        <div class="chart-panel-tf">
+            @for (int i = 0; i < Timeframes.Length; i++)
+            {
+                int index = i;
+                <MudButton Size="Size.Small" Variant="@(index == TimeframeIndex ? Variant.Filled : Variant.Text)" Color="@(index == TimeframeIndex ? Color.Primary : Color.Default)"
+                           OnClick="@(() => TimeframeChanged.InvokeAsync(index))">@Timeframes[index].Label</MudButton>
+            }
+        </div>
         <MudSpacer />
         <span class="chart-panel-live @(Live ? "on" : string.Empty)" title="@LiveTitle"></span>
         <MudTooltip Text="@(Maximized ? "Restaurar" : "Ver só este gráfico")">

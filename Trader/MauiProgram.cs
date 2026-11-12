@@ -9,7 +9,7 @@ public static class MauiProgram
     public const string ServerUrlKey = "ServerUrl";
 
     internal static string DefaultServerUrl =>
-        DeviceInfo.Platform == DevicePlatform.Android ? "http://10.0.2.2:5256" : "http://localhost:5256";
+        DeviceInfo.Platform == DevicePlatform.Android ? "https://3pc274.tail54c804.ts.net:10000" : "http://localhost:5256";
 
     public static MauiApp CreateMauiApp()
     {

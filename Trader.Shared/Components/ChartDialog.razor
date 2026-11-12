@@ -17,7 +17,24 @@
     </TitleContent>
     <DialogContent>
         <div class="chart-dialog">
-            <div class="chart-toolbar">
+            <div class="chart-toolbar-mobile">
+                <MudSelect T="Timeframe" Value="_timeframe" ValueChanged="SelectTimeframeAsync" ToStringFunc="@(t => t?.Label)" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                           Class="chart-tf-select" aria-label="Intervalo">
+                    @foreach (Timeframe timeframe in Timeframes)
+                    {
+                        <MudSelectItem Value="timeframe">@timeframe.Label</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => _sheet = SheetTools)">Ferramentas</MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="Desenhar" OnClick="@(() => _sheet = SheetDraw)" />
+                <MudSpacer />
+                @if (_ready)
+                {
+                    <button type="button" class="chart-live-dot @(_liveProblem is null ? "ok" : "warn")" aria-label="Fonte do preço" @onclick="ShowSource"></button>
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Backspace" aria-label="Apagar desenho selecionado" OnClick="RemoveSelectedAsync" />
+            </div>
+            <div class="chart-toolbar chart-toolbar-desktop">
                 @foreach (Timeframe timeframe in Timeframes)
                 {
                     <MudButton Size="Size.Small" Variant="@(timeframe == _timeframe ? Variant.Filled : Variant.Text)" Color="@(timeframe == _timeframe ? Color.Primary : Color.Default)"
@@ -27,7 +44,7 @@
                 <MudMenu Label="Indicadores" StartIcon="@Icons.Material.Filled.Insights" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @foreach (IndicatorOption indicator in Indicators)
                     {
-                        <MudMenuItem OnClick="@(() => ToggleIndicatorAsync(indicator))">@(_activeIndicators.Contains(indicator.Name) ? "✓ " : "    ")@indicator.Label</MudMenuItem>
+                        <MudMenuItem Icon="@(_activeIndicators.Contains(indicator.Name) ? Icons.Material.Filled.Check : null)" OnClick="@(() => ToggleIndicatorAsync(indicator))">@indicator.Label</MudMenuItem>
                     }
                     <MudDivider />
                     <MudMenuItem OnClick="ConfigureIndicatorAsync">Configurar parâmetros e cores…</MudMenuItem>
@@ -35,12 +52,16 @@
                 <MudMenu Label="Comparar" StartIcon="@Icons.Material.Filled.CompareArrows" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @if (_compareSymbol is not null)
                     {
-                        <MudMenuItem OnClick="ClearCompareAsync">✕ Remover @_compareSymbol</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.Close" OnClick="ClearCompareAsync">Remover @_compareSymbol</MudMenuItem>
                         <MudDivider />
                     }
-                    @foreach (InstrumentQuote option in _compareOptions)
+                    <div class="px-3 pb-1">
+                        <MudTextField T="string" @bind-Value="_compareFilter" Immediate="true" Placeholder="Procurar ativo" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                    </div>
+                    @foreach (InstrumentQuote option in CompareMatches)
                     {
-                        <MudMenuItem OnClick="@(() => SelectCompareAsync(option))">@(option.Symbol == _compareSymbol ? "✓ " : "    ")@option.Symbol · @option.Name</MudMenuItem>
+                        <MudMenuItem Icon="@(option.Symbol == _compareSymbol ? Icons.Material.Filled.Check : null)" OnClick="@(() => SelectCompareAsync(option))">@option.Symbol · @option.Name</MudMenuItem>
                     }
                 </MudMenu>
                 <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.QuestionAnswer" OnClick="OpenWhyAsync">Porquê?</MudButton>
@@ -51,30 +72,30 @@
                 <MudMenu Label="Visual" StartIcon="@Icons.Material.Filled.Tune" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @foreach (VisualOption option in Kinds)
                     {
-                        <MudMenuItem OnClick="@(() => SetKindAsync(option))">@(_kind == option.Key ? "✓ " : "    ")@option.Label</MudMenuItem>
+                        <MudMenuItem Icon="@(_kind == option.Key ? Icons.Material.Filled.Check : null)" OnClick="@(() => SetKindAsync(option))">@option.Label</MudMenuItem>
                     }
                     <MudDivider />
                     @foreach (VisualOption option in Axes)
                     {
-                        <MudMenuItem OnClick="@(() => SetAxisAsync(option))">@(_axis == option.Key ? "✓ " : "    ")@option.Label</MudMenuItem>
+                        <MudMenuItem Icon="@(_axis == option.Key ? Icons.Material.Filled.Check : null)" OnClick="@(() => SetAxisAsync(option))">@option.Label</MudMenuItem>
                     }
                 </MudMenu>
                 <MudMenu Label="Níveis" StartIcon="@Icons.Material.Filled.HorizontalSplit" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @foreach ((string group, string label) in LevelGroups)
                     {
-                        <MudMenuItem OnClick="@(() => ToggleLevelGroupAsync(group))">@(_levelGroups.Contains(group) ? "✓ " : "    ")@label</MudMenuItem>
+                        <MudMenuItem Icon="@(_levelGroups.Contains(group) ? Icons.Material.Filled.Check : null)" OnClick="@(() => ToggleLevelGroupAsync(group))">@label</MudMenuItem>
                     }
                 </MudMenu>
                 <MudMenu Label="ICT" StartIcon="@Icons.Material.Filled.Layers" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @foreach ((string group, string label) in SmartMoneyOptions)
                     {
-                        <MudMenuItem OnClick="@(() => ToggleSmartMoneyAsync(group))">@(_smartMoneyGroups.Contains(group) ? "✓ " : "    ")@label</MudMenuItem>
+                        <MudMenuItem Icon="@(_smartMoneyGroups.Contains(group) ? Icons.Material.Filled.Check : null)" OnClick="@(() => ToggleSmartMoneyAsync(group))">@label</MudMenuItem>
                     }
                 </MudMenu>
                 <MudMenu Label="Eventos" StartIcon="@Icons.Material.Filled.Flag" Size="Size.Small" Variant="Variant.Text" Dense="true">
                     @foreach ((string kind, string label) in EventKinds)
                     {
-                        <MudMenuItem OnClick="@(() => ToggleEventKindAsync(kind))">@(_eventKinds.Contains(kind) ? "✓ " : "    ")@label</MudMenuItem>
+                        <MudMenuItem Icon="@(_eventKinds.Contains(kind) ? Icons.Material.Filled.Check : null)" OnClick="@(() => ToggleEventKindAsync(kind))">@label</MudMenuItem>
                     }
                 </MudMenu>
                 <MudButton Size="Size.Small" Variant="@(_plan is not null ? Variant.Filled : Variant.Text)" Color="@(_plan is not null ? Color.Primary : Color.Default)" StartIcon="@Icons.Material.Filled.Straighten" OnClick="TogglePlanAsync">Plano</MudButton>
@@ -92,7 +113,7 @@
                         <MudDivider />
                         @foreach (ChartTemplate template in _templates)
                         {
-                            <MudMenuItem OnClick="@(() => DeleteTemplateAsync(template))">✕ Apagar «@template.Name»</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="@(() => DeleteTemplateAsync(template))">Apagar «@template.Name»</MudMenuItem>
                         }
                     }
                 </MudMenu>
@@ -170,7 +191,7 @@
             }
 
             <div class="chart-body">
-                <div class="chart-tools">
+                <div class="chart-tools chart-tools-desktop">
                     @foreach (DrawingTool tool in DrawingTools)
                     {
                         <MudTooltip Text="@tool.Label" Placement="Placement.Right">
@@ -197,6 +218,123 @@
             @if (_showFlow && Quote.AssetClass == AssetClass.Crypto)
             {
                 <div class="pa-2 order-flow-wrap"><OrderFlowPanel Symbol="@Quote.Symbol" /></div>
+            }
+
+            @if (_sheet is not null)
+            {
+                <div class="sheet-backdrop" @onclick="@(() => _sheet = null)"></div>
+                <div class="sheet" role="dialog" aria-label="@(_sheet == SheetDraw ? "Desenhar" : "Ferramentas")">
+                    <div class="sheet-header">
+                        <MudText Typo="Typo.h6">@(_sheet == SheetDraw ? "Desenhar" : "Ferramentas")</MudText>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Fechar" OnClick="@(() => _sheet = null)" />
+                    </div>
+                    <div class="sheet-body">
+                        @if (_sheet == SheetDraw)
+                        {
+                            <div class="sheet-grid">
+                                @foreach (DrawingTool tool in DrawingTools)
+                                {
+                                    <button type="button" class="sheet-tool" @onclick="@(() => RunAndCloseAsync(() => StartDrawingAsync(tool)))">
+                                        <MudIcon Icon="@tool.Icon" />
+                                        <span>@tool.Label</span>
+                                    </button>
+                                }
+                            </div>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteSweep" FullWidth="true" Class="mt-3"
+                                       OnClick="@(() => RunAndCloseAsync(ClearDrawingsAsync))">Apagar todos os desenhos</MudButton>
+                        }
+                        else
+                        {
+                            <div class="sheet-section">Ações</div>
+                            <div class="sheet-chips">
+                                @SheetChip("Plano", _plan is not null, () => RunAndCloseAsync(TogglePlanAsync))
+                                @SheetChip("Alerta", _alertLinePrice is not null, () => RunAndCloseAsync(ToggleAlertLineAsync))
+                                @if (CanReplay || _replaying)
+                                {
+                                    @SheetChip("Replay", _replaying, () => RunAndCloseAsync(ToggleReplayAsync))
+                                }
+                                @if (Quote.AssetClass == AssetClass.Crypto)
+                                {
+                                    @SheetChip("Fluxo", _showFlow, () => RunAndCloseAsync(() => { _showFlow = !_showFlow; return Task.CompletedTask; }))
+                                }
+                                @SheetChip("Porquê se mexeu?", false, () => RunAndCloseAsync(OpenWhyAsync))
+                            </div>
+
+                            <div class="sheet-section">Indicadores</div>
+                            <div class="sheet-chips">
+                                @foreach (IndicatorOption indicator in Indicators)
+                                {
+                                    @SheetChip(indicator.Label, _activeIndicators.Contains(indicator.Name), () => ToggleIndicatorAsync(indicator))
+                                }
+                                @SheetChip("Configurar…", false, () => RunAndCloseAsync(ConfigureIndicatorAsync))
+                            </div>
+
+                            <div class="sheet-section">Níveis</div>
+                            <div class="sheet-chips">
+                                @foreach ((string group, string label) in LevelGroups)
+                                {
+                                    @SheetChip(label, _levelGroups.Contains(group), () => ToggleLevelGroupAsync(group))
+                                }
+                            </div>
+
+                            <div class="sheet-section">ICT</div>
+                            <div class="sheet-chips">
+                                @foreach ((string group, string label) in SmartMoneyOptions)
+                                {
+                                    @SheetChip(label, _smartMoneyGroups.Contains(group), () => ToggleSmartMoneyAsync(group))
+                                }
+                            </div>
+
+                            <div class="sheet-section">Eventos</div>
+                            <div class="sheet-chips">
+                                @foreach ((string kind, string label) in EventKinds)
+                                {
+                                    @SheetChip(label, _eventKinds.Contains(kind), () => ToggleEventKindAsync(kind))
+                                }
+                            </div>
+
+                            <div class="sheet-section">Tipo de gráfico</div>
+                            <div class="sheet-chips">
+                                @foreach (VisualOption option in Kinds)
+                                {
+                                    @SheetChip(option.Label, _kind == option.Key, () => SetKindAsync(option))
+                                }
+                            </div>
+
+                            <div class="sheet-section">Eixo</div>
+                            <div class="sheet-chips">
+                                @foreach (VisualOption option in Axes)
+                                {
+                                    @SheetChip(option.Label, _axis == option.Key, () => SetAxisAsync(option))
+                                }
+                            </div>
+
+                            <div class="sheet-section">Comparar com</div>
+                            <MudTextField T="string" @bind-Value="_compareFilter" Immediate="true" Placeholder="Procurar ativo" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-2" />
+                            <div class="sheet-chips">
+                                @if (_compareSymbol is not null)
+                                {
+                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled" OnClose="@(_ => ClearCompareAsync())">@_compareSymbol</MudChip>
+                                }
+                                @foreach (InstrumentQuote option in CompareMatches.Where(o => o.Symbol != _compareSymbol).Take(12))
+                                {
+                                    @SheetChip(option.Symbol, false, () => RunAndCloseAsync(() => SelectCompareAsync(option)))
+                                }
+                            </div>
+
+                            <div class="sheet-section">Modelos</div>
+                            <div class="sheet-chips">
+                                @foreach (ChartTemplate template in _templates)
+                                {
+                                    <MudChip T="string" Variant="Variant.Outlined" OnClick="@(_ => RunAndCloseAsync(() => ApplyTemplateAsync(template)))" OnClose="@(_ => DeleteTemplateAsync(template))">@template.Name</MudChip>
+                                }
+                                @SheetChip("Guardar indicadores atuais…", false, () => RunAndCloseAsync(SaveTemplateAsync))
+                            </div>
+                        }
+                    </div>
+                </div>
             }
         </div>
     </DialogContent>
@@ -276,6 +414,31 @@
     private bool _showFlow;
     private string _cryptoBasis = CryptoBasis.Usd;
     private string _broker = BrokerCatalog.Other;
+    private const string SheetTools = "tools";
+    private const string SheetDraw = "draw";
+    private const int CompareMatchLimit = 40;
+    private string? _sheet;
+    private string? _compareFilter;
+
+    private IEnumerable<InstrumentQuote> CompareMatches => _compareOptions
+        .Where(o => string.IsNullOrWhiteSpace(_compareFilter)
+            || o.Symbol.Contains(_compareFilter, StringComparison.OrdinalIgnoreCase)
+            || o.Name.Contains(_compareFilter, StringComparison.OrdinalIgnoreCase))
+        .Take(CompareMatchLimit);
+
+    private RenderFragment SheetChip(string label, bool active, Func<Task> onClick) => __builder =>
+    {
+        <MudChip T="string" Variant="@(active ? Variant.Filled : Variant.Outlined)" Color="@(active ? Color.Primary : Color.Default)"
+                 Icon="@(active ? Icons.Material.Filled.Check : null)" OnClick="@(_ => onClick())">@label</MudChip>
+    };
+
+    private async Task RunAndCloseAsync(Func<Task> action)
+    {
+        _sheet = null;
+        await action();
+    }
+
+    private void ShowSource() => Snackbar.Add($"{(_liveProblem ?? LiveLabel)}. {SourceTooltip}", Severity.Info);
 
     [Parameter, EditorRequired] public InstrumentQuote Quote { get; set; } = default!;
 

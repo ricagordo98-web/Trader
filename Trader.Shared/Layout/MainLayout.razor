@@ -1,9 +1,12 @@
 @inherits LayoutComponentBase
 @implements IDisposable
+@using MudBlazor.Services
 @inject ThemeState Theme
 @inject AuthSession Session
 @inject IClientStore Store
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject IBrowserViewportService Viewport
 
 <MudThemeProvider @ref="_themeProvider" @bind-IsDarkMode="IsDark" Theme="_theme" />
 <MudPopoverProvider />
@@ -39,7 +42,7 @@ else
         </MudDrawer>
         <MudMainContent Class="trader-main">
             @Body
-            <BottomNav />
+            <BottomNav OnMore="@(() => _drawerOpen = true)" />
         </MudMainContent>
     </MudLayout>
 }
@@ -67,6 +70,26 @@ else
     {
         Theme.Changed += OnStateChanged;
         Session.Changed += OnStateChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private const int DesktopDrawerMinWidth = 960;
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        try
+        {
+            BrowserWindowSize size = await Viewport.GetCurrentBrowserWindowSizeAsync();
+
+            if (size.Width < DesktopDrawerMinWidth && _drawerOpen)
+            {
+                _drawerOpen = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (JSException)
+        {
+        }
     }
 
     private bool _tourChecked;
@@ -92,6 +115,8 @@ else
             await Theme.SetModeAsync(Store, ThemeMode.System, await _themeProvider.GetSystemDarkModeAsync());
         }
 
+        BrowserWindowSize size = await Viewport.GetCurrentBrowserWindowSizeAsync();
+        _drawerOpen = size.Width >= DesktopDrawerMinWidth;
         _ready = true;
         StateHasChanged();
     }
@@ -128,5 +153,6 @@ else
     {
         Theme.Changed -= OnStateChanged;
         Session.Changed -= OnStateChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 }

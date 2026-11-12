@@ -2,9 +2,19 @@
 
 @if (Entry is { } entry)
 {
-    <MudTooltip Text="@entry.Short" Arrow="true" Delay="250">
-        <a href="@($"/help#{entry.Key}")" class="glossary-term" aria-label="@($"Ajuda: {entry.Term}")">@if (ChildContent is null) { @entry.Term } else { @ChildContent }</a>
-    </MudTooltip>
+    <span class="info-tip">
+        <MudTooltip Text="@entry.Short" Arrow="true" Delay="250" Class="hover-only-tip">
+            <a href="@($"/help#{entry.Key}")" class="glossary-term" aria-label="@($"Ajuda: {entry.Term}")" @onclick="@(() => _open = !_open)" @onclick:preventDefault="true">@if (ChildContent is null) { @entry.Term } else { @ChildContent }</a>
+        </MudTooltip>
+        <MudPopover Open="_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Class="info-tip-popover">
+            <div class="pa-3">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">@entry.Term</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@entry.Short</MudText>
+                <MudLink Href="@($"/help#{entry.Key}")" Typo="Typo.body2">Abrir na Ajuda</MudLink>
+            </div>
+        </MudPopover>
+    </span>
+    <MudOverlay @bind-Visible="_open" AutoClose="true" />
 }
 else if (ChildContent is not null)
 {
@@ -12,6 +22,8 @@ else if (ChildContent is not null)
 }
 
 @code {
+    private bool _open;
+
     [Parameter] public string? Key { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }

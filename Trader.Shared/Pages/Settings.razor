@@ -93,7 +93,7 @@
                 </MudText>
                 <MudSwitch T="bool" Value="_profile.ShowShadowSuggestions" ValueChanged="@((bool on) => SaveProfileAsync(_profile with { ShowShadowSuggestions = on }))" Color="Color.Primary"
                            Label="Mostrar por omissão as sugestões só em registo (sombra)" />
-                <div class="d-flex align-center gap-3 mt-2">
+                <div class="d-flex align-center flex-wrap gap-3 mt-2">
                     <MudNumericField T="int" Label="Acerto histórico mínimo a mostrar (%)" Min="0" Max="95" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Style="max-width:260px"
                                      Value="@((int)Math.Round(_profile.MinDisplayedConfidence * 100))" ValueChanged="@((int percent) => SaveProfileAsync(_profile with { MinDisplayedConfidence = percent / 100.0 }))" />
                     <MudText Typo="Typo.caption" Class="symbol-name">0 = mostrar todas. Usa o acerto histórico quando existe, senão a estimativa do modelo.</MudText>
@@ -126,7 +126,7 @@
             </MudPaper>
             <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
                 <MudText Typo="Typo.subtitle1" Class="mb-2">Horário silencioso</MudText>
-                <div class="d-flex align-center gap-3">
+                <div class="d-flex align-center flex-wrap gap-3">
                     <MudNumericField T="int?" Label="Das (hora)" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Style="max-width:120px"
                                      Value="_profile.QuietFromHour" ValueChanged="@((int? hour) => SetQuietAsync(hour, _profile.QuietToHour))" />
                     <MudNumericField T="int?" Label="Até (hora)" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Style="max-width:120px"
@@ -136,7 +136,7 @@
                 <MudText Typo="Typo.caption" Class="symbol-name mt-1">
                     Nestas horas (hora do servidor) os teus alertas continuam a registar-se na campainha, mas não enviam notificações para o telemóvel (ntfy). Só os stops atingidos passam sempre.
                 </MudText>
-                <div class="d-flex align-center gap-3 mt-3">
+                <div class="d-flex align-center flex-wrap gap-3 mt-3">
                     <MudTextField T="string" @bind-Value="_myTopic" Label="O meu tópico ntfy (opcional, só para ti)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="64" Style="max-width:380px" />
                     <MudButton Variant="Variant.Text" OnClick="@(() => SaveProfileAsync(_profile with { NtfyTopic = string.IsNullOrWhiteSpace(_myTopic) ? null : _myTopic.Trim() }))">Guardar</MudButton>
                 </div>
@@ -182,7 +182,7 @@
                 {
                     <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_ntfyError</MudAlert>
                 }
-                <div class="d-flex gap-3">
+                <div class="d-flex flex-wrap gap-3 button-row">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SaveNtfyAsync">Guardar</MudButton>
                     <MudButton Variant="Variant.Outlined" Disabled="_busy" OnClick="TestNtfyAsync">Enviar notificação de teste</MudButton>
                 </div>
@@ -547,7 +547,7 @@
                         {
                             <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_scoringError</MudAlert>
                         }
-                        <div class="d-flex gap-3 mb-6">
+                        <div class="d-flex flex-wrap gap-3 mb-6 button-row">
                             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SaveScoringAsync">Guardar</MudButton>
                             <MudButton Variant="Variant.Outlined" Disabled="_busy" OnClick="ResetScoringAsync">Repor valores por omissão</MudButton>
                         </div>

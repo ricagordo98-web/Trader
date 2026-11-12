@@ -54,9 +54,10 @@
                     <MudSelectItem Value="@SortExpires">Expira primeiro</MudSelectItem>
                     <MudSelectItem Value="@SortSymbol">Ativo (A–Z)</MudSelectItem>
                 </MudSelect>
-                <MudTooltip Text="Sugestões que falharam alguma regra. São gravadas e avaliadas como as outras para a app aprender, mas não são para seguir.">
+                <div class="d-flex align-center">
                     <MudSwitch T="bool" Value="_showShadow" ValueChanged="SetShowShadowAsync" Color="Color.Primary" Label="Incluir só registo (sombra)" />
-                </MudTooltip>
+                    <InfoTip Text="Sugestões que falharam alguma regra. São gravadas e avaliadas como as outras para a app aprender, mas não são para seguir." Label="O que é a sombra?" />
+                </div>
                 @if (_open.Count > 0)
                 {
                     <MudText Typo="Typo.caption" Class="symbol-name">@VisibleOpen().Count() de @_open.Count</MudText>

@@ -14,7 +14,7 @@
         <MudText Typo="Typo.h4">Gráficos</MudText>
         <MudSpacer />
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddChart" OnClick="AddAsync" Disabled="@(_instruments.Count == 0)">Adicionar gráfico</MudButton>
-        <MudMenu Label="Organizar" StartIcon="@Icons.Material.Filled.GridView" Variant="Variant.Outlined" Dense="true" Disabled="@(_panels.Count == 0)">
+        <MudMenu Label="Organizar" StartIcon="@Icons.Material.Filled.GridView" Variant="Variant.Outlined" Dense="true" Class="desktop-only" Disabled="@(_panels.Count == 0)">
             <MudMenuItem OnClick="@(() => ArrangeAsync(WorkspaceLayout.AutoColumns(_panels.Count)))">Grelha automática</MudMenuItem>
             <MudMenuItem OnClick="@(() => ArrangeAsync(1))">1 coluna</MudMenuItem>
             <MudMenuItem OnClick="@(() => ArrangeAsync(2))">2 colunas</MudMenuItem>
@@ -33,11 +33,11 @@
                 <MudDivider />
                 @foreach (ChartLayoutDto item in _layouts)
                 {
-                    <MudMenuItem OnClick="@(() => DeleteLayoutAsync(item))">✕ Apagar «@(item.Name)»</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="@(() => DeleteLayoutAsync(item))">Apagar «@(item.Name)»</MudMenuItem>
                 }
             }
         </MudMenu>
-        <MudTooltip Text="Sincroniza o cursor e a posição horizontal entre os gráficos">
+        <MudTooltip Text="Sincroniza o cursor e a posição horizontal entre os gráficos" RootClass="desktop-only">
             <MudButton Variant="@(_sync ? Variant.Filled : Variant.Outlined)" Color="@(_sync ? Color.Primary : Color.Default)" StartIcon="@Icons.Material.Filled.Sync" OnClick="ToggleSyncAsync" Disabled="@(_panels.Count < 2)">Sincronizar</MudButton>
         </MudTooltip>
         <MudButton Variant="@(_soloId is null ? Variant.Outlined : Variant.Filled)" Color="@(_soloId is null ? Color.Default : Color.Primary)"
@@ -59,7 +59,7 @@
     }
     else
     {
-        <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">
+        <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2 desktop-only">
             Arrasta um gráfico pelo cabeçalho para o mover e puxa o canto inferior direito para mudar o tamanho. A disposição fica guardada neste dispositivo.
         </MudText>
 

@@ -1,0 +1,15 @@
+<span class="info-tip">
+    <MudIconButton Icon="@Icons.Material.Outlined.Info" Size="Size.Small" aria-label="@Label" OnClick="@(() => _open = !_open)" />
+    <MudPopover Open="_open" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Class="info-tip-popover">
+        <MudText Typo="Typo.body2" Class="pa-3">@Text</MudText>
+    </MudPopover>
+</span>
+<MudOverlay @bind-Visible="_open" AutoClose="true" />
+
+@code {
+    private bool _open;
+
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+
+    [Parameter] public string Label { get; set; } = "Mais informação";
+}
