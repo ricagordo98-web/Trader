@@ -1,0 +1,199 @@
+@inject TraderApiClient Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Setup is null ? "Novo setup" : $"Setup: {Setup.Name}")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.caption" Class="symbol-name mb-3">
+            Um setup é uma situação de mercado que reconheces e sabes operar, com regras de entrada e de saída escritas. Só entras em trades que pertençam a um setup.
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="8">
+                <MudTextField T="string" @bind-Value="_name" Label="Nome (ex.: Pullback em tendência)" MaxLength="40" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSwitch T="bool" @bind-Value="_active" Label="Ativo" Color="Color.Primary" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_description" Label="O que é e quando funciona" Lines="2" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField T="string" @bind-Value="_entry" Label="Critérios de entrada" Lines="3" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField T="string" @bind-Value="_exit" Label="Critérios de saída (stop, alvo, tempo)" Lines="3" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_checklist" Label="Checklist deste setup (uma por linha)" Lines="3" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Aparece na checklist antes de entrar, junto com a do plano." />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Class="symbol-name mb-1">Gráfico de exemplo (PNG/JPEG até 400 KB)</MudText>
+                <div class="d-flex align-center gap-2">
+                    <InputFile OnChange="PickImageAsync" accept="image/png,image/jpeg" />
+                    @if (_image is not null)
+                    {
+                        <MudButton Size="Size.Small" OnClick="@(() => _image = null)">Remover</MudButton>
+                    }
+                </div>
+                @if (_image is not null)
+                {
+                    <img src="@_image" alt="Exemplo do setup" style="max-width:100%;max-height:240px;margin-top:8px;border-radius:6px" />
+                }
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Regra testável no histórico (opcional)</MudText>
+        <MudText Typo="Typo.caption" Class="symbol-name mb-2">
+            Se o setup se puder descrever por uma destas regras, a app testa-o em dados diários antigos, já com custos, e diz-te se alguma vez teve margem. Entra no dia seguinte à abertura; stop e alvo calculados pelo ATR.
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudSelect T="SetupEntryRule" @bind-Value="_rule" Label="Regra de entrada" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem Value="SetupEntryRule.None">Nenhuma (só manual)</MudSelectItem>
+                    <MudSelectItem Value="SetupEntryRule.TrendPullback">Pullback à EMA20 em tendência</MudSelectItem>
+                    <MudSelectItem Value="SetupEntryRule.Breakout">Rutura do máximo/mínimo de N dias</MudSelectItem>
+                    <MudSelectItem Value="SetupEntryRule.RsiReversal">Reversão do RSI</MudSelectItem>
+                    <MudSelectItem Value="SetupEntryRule.MovingAverageCross">Cruzamento EMA20/EMA50</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch T="bool" @bind-Value="_longOnly" Label="Só compras" Color="Color.Primary" Disabled="@(_rule == SetupEntryRule.None)" />
+            </MudItem>
+
+            @if (_rule != SetupEntryRule.None)
+            {
+                @if (_rule == SetupEntryRule.Breakout)
+                {
+                    <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="_lookback" Label="Dias da rutura" Min="5" Max="200" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+                }
+
+                @if (_rule == SetupEntryRule.RsiReversal)
+                {
+                    <MudItem xs="6" sm="3"><MudNumericField T="double" @bind-Value="_rsiLevel" Label="Nível do RSI" Min="5" Max="50" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+                }
+
+                <MudItem xs="6" sm="3"><MudNumericField T="double" @bind-Value="_stopAtr" Label="Stop (× ATR)" Min="0.5" Max="10" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+                <MudItem xs="6" sm="3"><MudNumericField T="double" @bind-Value="_targetR" Label="Alvo (× risco)" Min="0.5" Max="10" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+                <MudItem xs="6" sm="3"><MudNumericField T="int" @bind-Value="_maxBars" Label="Máx. dias na trade" Min="1" Max="250" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+            }
+        </MudGrid>
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_busy" OnClick="SaveAsync">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const long MaxImageBytes = 400 * 1024;
+
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _entry = string.Empty;
+    private string _exit = string.Empty;
+    private string _checklist = string.Empty;
+    private string? _image;
+    private bool _active = true;
+    private SetupEntryRule _rule;
+    private bool _longOnly = true;
+    private int _lookback = 20;
+    private double _rsiLevel = 30;
+    private double _stopAtr = 1.5;
+    private double _targetR = 2;
+    private int _maxBars = 20;
+    private string? _error;
+    private bool _busy;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public TradingSetupDto? Setup { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Setup is null)
+        {
+            return;
+        }
+
+        _name = Setup.Name;
+        _description = Setup.Description;
+        _entry = Setup.EntryCriteria;
+        _exit = Setup.ExitCriteria;
+        _checklist = string.Join('\n', Setup.Checklist);
+        _image = Setup.Image;
+        _active = Setup.Active;
+        _rule = Setup.Strategy.Entry;
+        _longOnly = Setup.Strategy.LongOnly;
+        _lookback = Setup.Strategy.Lookback;
+        _rsiLevel = Setup.Strategy.RsiLevel;
+        _stopAtr = Setup.Strategy.StopAtr;
+        _targetR = Setup.Strategy.TargetR;
+        _maxBars = Setup.Strategy.MaxBars;
+    }
+
+    private async Task PickImageAsync(InputFileChangeEventArgs args)
+    {
+        IBrowserFile file = args.File;
+
+        if (file.Size > MaxImageBytes)
+        {
+            _error = "A imagem tem mais de 400 KB.";
+            return;
+        }
+
+        await using Stream stream = file.OpenReadStream(MaxImageBytes);
+        using MemoryStream buffer = new();
+        await stream.CopyToAsync(buffer);
+        _image = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer.ToArray())}";
+        _error = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            SetupStrategy strategy = new()
+            {
+                Entry = _rule,
+                LongOnly = _longOnly,
+                Lookback = _lookback,
+                RsiLevel = _rsiLevel,
+                StopAtr = _stopAtr,
+                TargetR = _targetR,
+                MaxBars = _maxBars
+            };
+
+            _error = await Api.SaveSetupAsync(
+                Setup?.Id,
+                new SaveSetupRequest(_name, _description, _entry, _exit, _checklist.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), _image, strategy, _active));
+
+            if (_error is null)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível guardar. Verifica se o servidor está a correr.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

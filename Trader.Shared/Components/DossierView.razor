@@ -1,0 +1,157 @@
+@using System.Globalization
+@using Trader.Core.Analysis
+
+<MudPaper Elevation="0" Outlined="true" Class="pa-4">
+    <div class="d-flex align-center flex-wrap gap-2 mb-2">
+        <MudText Typo="Typo.h6">@Dossier.Symbol</MudText>
+        <MudText Typo="Typo.body2" Class="symbol-name">@Dossier.Name</MudText>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(Dossier.Direction == TradeDirection.Buy ? Color.Success : Color.Error)" Class="ma-0">
+            @(Dossier.Direction == TradeDirection.Buy ? "COMPRA" : "VENDA")@(Dossier.DirectionFromUser ? string.Empty : " (assumida)")
+        </MudChip>
+        <MudSpacer />
+        <MudText Typo="Typo.h6">@Price(Dossier.Price) @Dossier.Currency</MudText>
+        @if (Dossier.ChangePercent is { } change)
+        {
+            <MudText Typo="Typo.body2" Color="@(change >= 0 ? Color.Success : Color.Error)">@change.ToString("+0.00;-0.00", Pt)%</MudText>
+        }
+    </div>
+    <MudText Typo="Typo.caption" Class="symbol-name mb-3">Recolhido às @Dossier.GeneratedAt.ToLocalTime().ToString("HH:mm", Pt)@(Dossier.PriceAsOf is { } asOf ? $" · preço de {asOf.ToLocalTime():HH:mm}" : string.Empty)</MudText>
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Tendência</MudText>
+            @foreach (TimeframeView tf in Dossier.Timeframes)
+            {
+                <div class="d-flex align-center gap-2 mb-1">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0" Color="@TrendColor(tf.Trend)">@tf.Label · @tf.Trend</MudChip>
+                    <MudText Typo="Typo.caption" Class="symbol-name">RSI @(tf.Rsi?.ToString("0", Pt) ?? "—") · @(tf.ChangePercent?.ToString("+0.0;-0.0", Pt) ?? "—")%</MudText>
+                </div>
+            }
+            @if (Dossier.Timeframes.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="symbol-name">Sem velas suficientes.</MudText>
+            }
+            <MudText Typo="Typo.caption" Class="symbol-name mt-2">
+                ATR diário @Price(Dossier.Atr) (@((Dossier.Price > 0 ? Dossier.Atr / Dossier.Price * 100 : 0).ToString("0.0", Pt))%) · suporte @Price(Dossier.SwingLow) · resistência @Price(Dossier.SwingHigh)
+                @if (Dossier.YearLow is { } low && Dossier.YearHigh is { } high)
+                {
+                    <text> · 52 sem.: @Price(low) – @Price(high)</text>
+                }
+            </MudText>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Segunda opinião sobre a trade</MudText>
+            @if (Dossier.Analysis is { } analysis)
+            {
+                <div class="d-flex align-center gap-2 mb-1">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@ScoreColor(analysis.Score)" Class="ma-0">@analysis.Score/100</MudChip>
+                    <MudText Typo="Typo.body2">@analysis.Verdict</MudText>
+                </div>
+                @foreach (AnalysisFinding finding in analysis.Findings.Take(4))
+                {
+                    <MudText Typo="Typo.caption" Class="symbol-name d-block">@(finding.Kind is FindingKind.Positive ? "＋" : finding.Kind is FindingKind.Negative or FindingKind.Warning ? "−" : "·") @finding.Title</MudText>
+                }
+                <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                    Sentimento das notícias @analysis.Sentiment.WeightedSentiment.ToString("+0.00;-0.00", Pt) em @analysis.Sentiment.ArticleCount artigos.
+                    Modelo: @(analysis.Model.Direction switch { TradeDirection.Buy => "inclina-se para comprar", TradeDirection.Sell => "inclina-se para vender", _ => "sem direção clara" }).
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="symbol-name">Sem análise disponível.</MudText>
+            }
+
+            @if (Dossier.Model.OpenSuggestion is { } suggestion)
+            {
+                <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                    Sugestão aberta do modelo: @(suggestion.Direction == TradeDirection.Buy ? "compra" : "venda") a @Price(suggestion.Entry), stop @Price(suggestion.StopLoss), alvo @Price(suggestion.TakeProfit).
+                </MudText>
+            }
+
+            @if (Dossier.Model.ClosedOnSymbol > 0)
+            {
+                <MudText Typo="Typo.caption" Class="symbol-name d-block">
+                    Neste ativo o modelo fechou @Dossier.Model.ClosedOnSymbol sugestões: @((Dossier.Model.WinRateOnSymbol ?? 0).ToString("P0", Pt)) ganhas, R médio @((Dossier.Model.AverageROnSymbol ?? 0).ToString("+0.00;-0.00", Pt)). Amostra pequena; o modelo ainda não provou margem positiva.
+                </MudText>
+            }
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Eventos próximos</MudText>
+            @if (Dossier.Events.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="symbol-name">Nenhum evento importante nos próximos dias.</MudText>
+            }
+            else
+            {
+                @foreach (string e in Dossier.Events)
+                {
+                    <MudText Typo="Typo.body2"><MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Class="mr-1" />@e</MudText>
+                }
+            }
+
+            @if (Dossier.Exposure.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">O que já tens aberto</MudText>
+                @foreach (OpenExposure exposure in Dossier.Exposure)
+                {
+                    <MudText Typo="Typo.caption" Class="symbol-name d-block">
+                        @exposure.Symbol · @(exposure.Direction == TradeDirection.Buy ? "compra" : "venda")@(exposure.Correlation is { } c ? $" · correlação {c.ToString("0.00", Pt)}" : string.Empty)
+                    </MudText>
+                }
+            }
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Notícias recentes</MudText>
+            @if (Dossier.News.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="symbol-name">Nenhuma notícia recolhida para este ativo.</MudText>
+            }
+            @foreach (DossierNews item in Dossier.News)
+            {
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    <MudLink Href="@item.Url" Target="_blank" Typo="Typo.body2">@item.Title</MudLink>
+                    <span class="symbol-name"> · @item.Source · @item.PublishedAt.ToLocalTime().ToString("dd/MM", Pt)@(item.Sentiment is { } s ? $" · {s.ToString("+0.00;-0.00", Pt)}" : string.Empty)</span>
+                </MudText>
+            }
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Proposta de trade (stop e alvo pela volatilidade)</MudText>
+            <MudText Typo="Typo.body2">
+                Entrada @Price(Dossier.Draft.Entry) · stop @Price(Dossier.Draft.StopLoss) · alvo @Price(Dossier.Draft.TakeProfit) · R:R @Dossier.Draft.RewardRisk.ToString("0.0", Pt)
+                @if (Dossier.Draft.Quantity > 0)
+                {
+                    <text> · quantidade @Dossier.Draft.Quantity.ToString("0.####", Pt) (arrisca @((Dossier.Draft.RiskPercent ?? 0).ToString("0.##", Pt))% do capital)</text>
+                }
+            </MudText>
+        </MudItem>
+
+        @if (Dossier.Check is { } check)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Regras do teu sistema</MudText>
+                <PreTradePanel Check="check" />
+            </MudItem>
+        }
+    </MudGrid>
+</MudPaper>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    [Parameter, EditorRequired] public TradeDossier Dossier { get; set; } = default!;
+
+    private static string Price(double value) => Trader.Core.Assistant.DossierText.Price(value);
+
+    private static Color TrendColor(string trend) => trend switch
+    {
+        "em alta" => Color.Success,
+        "em baixa" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Color ScoreColor(int score) => score >= 65 ? Color.Success : score >= 45 ? Color.Warning : Color.Error;
+}

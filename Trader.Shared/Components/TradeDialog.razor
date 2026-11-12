@@ -1,4 +1,5 @@
 @using System.Globalization
+@using System.Text.Json
 @inject TraderApiClient Api
 
 <MudDialog>
@@ -7,7 +8,7 @@
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.caption" Class="symbol-name mb-3">
-            Regista a operação que fizeste na tua corretora. Os preços são os da plataforma; se o ativo for noutra moeda, indica a taxa de conversão para a moeda da conta.
+            Regista a operação que fizeste (ou vais fazer) na tua corretora. Antes de gravar, o teu sistema verifica as regras do plano. Os preços são os da plataforma; se o ativo for noutra moeda, indica a taxa de conversão para a moeda da conta.
         </MudText>
 
         @if (Prefill?.SuggestionId is { } suggestionId)
@@ -17,11 +18,11 @@
 
         <MudGrid Spacing="2">
             <MudItem xs="12" sm="6">
-                <MudAutocomplete T="string" @bind-Value="_symbol" Label="Símbolo" Variant="Variant.Outlined" Margin="Margin.Dense"
+                <MudAutocomplete T="string" @bind-Value="_symbol" @bind-Value:after="RecheckAsync" Label="Símbolo" Variant="Variant.Outlined" Margin="Margin.Dense"
                                  SearchFunc="SearchSymbols" CoerceValue="true" CoerceText="false" ResetValueOnEmptyText="false" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudSelect T="TradeDirection" @bind-Value="_direction" Label="Direção" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelect T="TradeDirection" @bind-Value="_direction" @bind-Value:after="RecheckAsync" Label="Direção" Variant="Variant.Outlined" Margin="Margin.Dense">
                     <MudSelectItem Value="TradeDirection.Buy">Compra</MudSelectItem>
                     <MudSelectItem Value="TradeDirection.Sell">Venda</MudSelectItem>
                 </MudSelect>
@@ -30,34 +31,100 @@
                 <MudTextField T="DateTime" @bind-Value="_entryTime" Label="Data e hora de entrada" InputType="InputType.DateTimeLocal" Format="yyyy-MM-ddTHH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="6" sm="3">
-                <MudNumericField T="double" @bind-Value="_entry" Label="Preço de entrada" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                <MudNumericField T="double" @bind-Value="_entry" @bind-Value:after="RecheckAsync" Label="Preço de entrada" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudItem>
             <MudItem xs="6" sm="3">
-                <MudNumericField T="double" @bind-Value="_quantity" Label="Quantidade" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                <MudNumericField T="double" @bind-Value="_quantity" @bind-Value:after="RecheckAsync" Label="Quantidade" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudItem>
             <MudItem xs="6" sm="3">
-                <MudNumericField T="double?" @bind-Value="_stopLoss" Label="Stop loss" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                <MudNumericField T="double?" @bind-Value="_stopLoss" @bind-Value:after="RecheckAsync" Label="Stop loss" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudItem>
             <MudItem xs="6" sm="3">
-                <MudNumericField T="double?" @bind-Value="_takeProfit" Label="Take profit" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                <MudNumericField T="double?" @bind-Value="_takeProfit" @bind-Value:after="RecheckAsync" Label="Take profit" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudItem>
             <MudItem xs="6" sm="3">
-                <MudNumericField T="double" @bind-Value="_fxRate" Label="Conversão p/ moeda da conta" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                <MudNumericField T="double" @bind-Value="_fxRate" @bind-Value:after="RecheckAsync" Label="Conversão p/ moeda da conta" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudItem>
             <MudItem xs="6" sm="3">
                 <MudNumericField T="double" @bind-Value="_fees" Label="Comissões" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudSelect T="string" @bind-Value="_platform" Label="Plataforma" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelect T="string" @bind-Value="_platform" Label="Plataforma" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(_check?.Phase == SystemPhase.Paper)">
                     <MudSelectItem Value="@("XTB")">XTB</MudSelectItem>
                     <MudSelectItem Value="@("Trading 212")">Trading 212</MudSelectItem>
                     <MudSelectItem Value="@("Outra")">Outra</MudSelectItem>
                 </MudSelect>
             </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="long?" @bind-Value="_setupId" @bind-Value:after="RecheckAsync" Label="Setup do playbook" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (TradingSetupDto setup in _setups)
+                    {
+                        <MudSelectItem T="long?" Value="@((long?)setup.Id)">@setup.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_emotion" Label="Estado emocional" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (string emotion in Emotions)
+                    {
+                        <MudSelectItem T="string" Value="@emotion">@emotion</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
             <MudItem xs="12">
-                <MudTextField T="string" @bind-Value="_notes" Label="Notas (porque entraste?)" Lines="3" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="2000" />
+                <MudTextField T="string" @bind-Value="_notes" Label="Notas (porque entraste?)" Lines="2" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="2000" />
             </MudItem>
         </MudGrid>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.subtitle1" Class="mb-2">O teu sistema</MudText>
+
+        @if (_check is null)
+        {
+            <MudText Typo="Typo.body2" Class="symbol-name">@(_checking ? "A verificar as regras…" : "Preenche o ativo, a entrada e o stop para verificar as regras.")</MudText>
+        }
+        else
+        {
+            @if (_check.Phase == SystemPhase.Paper)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                    Fase de papel: esta trade é simulada, não a executes na corretora. Conta para as estatísticas do sistema.
+                </MudAlert>
+            }
+            else if (_check.Phase == SystemPhase.SmallReal)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                    Fase de real pequeno: o risco máximo é @((_check.RiskFactor * 100).ToString("0", Pt))% do normal.
+                </MudAlert>
+            }
+
+            <PreTradePanel Check="_check" />
+
+            @if (_check.SuggestedQuantity > 0 && Math.Abs(_check.SuggestedQuantity - _quantity) > 1e-9)
+            {
+                <div class="d-flex align-center gap-2 mt-2">
+                    <MudText Typo="Typo.caption" Class="symbol-name">Quantidade para o teu risco: @_check.SuggestedQuantity.ToString("0.####", Pt)</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="UseSuggestedQuantity">Usar</MudButton>
+                </div>
+            }
+
+            @if (_check.ManualItems.Count > 0 && !_check.Blocked)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">Checklist antes de entrar</MudText>
+
+                @foreach (string item in _check.ManualItems)
+                {
+                    string current = item;
+                    <MudCheckBox T="bool" Value="@_confirmed.Contains(current)" ValueChanged="@(on => Toggle(current, on))" Label="@current" Dense="true" Color="Color.Primary" />
+                }
+            }
+
+            @if (_check.NeedsJustification)
+            {
+                <MudTextField T="string" @bind-Value="_justification" Label="Porque vais avançar mesmo quebrando regras?" Lines="2" MaxLength="1000"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3" Required="true" />
+            }
+        }
 
         @if (_error is not null)
         {
@@ -66,11 +133,22 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancelar</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_busy" OnClick="SaveAsync">Guardar</MudButton>
+        @if (_check is { Blocked: true } || _check is null)
+        {
+            <MudButton Color="Color.Warning" Disabled="_busy" OnClick="SaveOutsideSystemAsync">Registar fora do sistema</MudButton>
+        }
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_busy || !CanSave)" OnClick="SaveAsync">Guardar</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
+    private static readonly string[] Emotions = ["Calmo", "Confiante", "Ansioso", "Impaciente", "Ganancioso", "Com medo", "Vingativo", "Cansado"];
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private IReadOnlyList<TradingSetupDto> _setups = [];
+    private PreTradeCheck? _check;
+    private readonly HashSet<string> _confirmed = [];
+    private CancellationTokenSource? _checkCts;
     private string? _symbol;
     private TradeDirection _direction;
     private DateTime _entryTime = DateTime.Now;
@@ -82,8 +160,12 @@
     private double _fees;
     private string _platform = "XTB";
     private string _notes = string.Empty;
+    private string? _emotion;
+    private long? _setupId;
+    private string _justification = string.Empty;
     private string? _error;
     private bool _busy;
+    private bool _checking;
 
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
@@ -91,24 +173,107 @@
 
     [Parameter] public IReadOnlyList<string> Symbols { get; set; } = [];
 
-    protected override void OnInitialized()
+    [Parameter] public TradeDossier? Dossier { get; set; }
+
+    private bool CanSave => _check is { Blocked: false } check
+        && check.ManualItems.All(_confirmed.Contains)
+        && (!check.NeedsJustification || _justification.Trim().Length >= 10);
+
+    protected override async Task OnInitializedAsync()
     {
-        if (Prefill is null)
+        if (Prefill is not null)
         {
-            return;
+            _symbol = Prefill.Symbol;
+            _direction = Prefill.Direction;
+            _entry = Prefill.Entry;
+            _quantity = Prefill.Quantity;
+            _stopLoss = Prefill.StopLoss;
+            _takeProfit = Prefill.TakeProfit;
+            _fxRate = Prefill.FxRate;
         }
 
-        _symbol = Prefill.Symbol;
-        _direction = Prefill.Direction;
-        _entry = Prefill.Entry;
-        _quantity = Prefill.Quantity;
-        _stopLoss = Prefill.StopLoss;
-        _takeProfit = Prefill.TakeProfit;
-        _fxRate = Prefill.FxRate;
+        try
+        {
+            _setups = (await Api.GetSetupsAsync()).Where(s => s.Active).ToList();
+            await RecheckAsync();
+        }
+        catch (HttpRequestException)
+        {
+        }
     }
 
     private Task<IEnumerable<string>> SearchSymbols(string value, CancellationToken cancellationToken) =>
         Task.FromResult(Symbols.Where(s => string.IsNullOrWhiteSpace(value) || s.Contains(value, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task RecheckAsync()
+    {
+        _checkCts?.Cancel();
+
+        if (string.IsNullOrWhiteSpace(_symbol) || _entry <= 0)
+        {
+            _check = null;
+            return;
+        }
+
+        _checkCts = new CancellationTokenSource();
+        CancellationToken token = _checkCts.Token;
+        _checking = true;
+
+        try
+        {
+            PreTradeCheck? check = await Api.CheckTradeAsync(new PreTradeRequest(_symbol, _direction, _entry, _stopLoss, _takeProfit, _quantity, _fxRate, _setupId), token);
+
+            if (!token.IsCancellationRequested)
+            {
+                _check = check;
+                _confirmed.IntersectWith(check?.ManualItems ?? []);
+
+                if (check?.Phase == SystemPhase.Paper)
+                {
+                    _platform = "Papel";
+                }
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    private async Task UseSuggestedQuantity()
+    {
+        _quantity = _check!.SuggestedQuantity;
+        await RecheckAsync();
+    }
+
+    private void Toggle(string item, bool on)
+    {
+        if (on)
+        {
+            _confirmed.Add(item);
+        }
+        else
+        {
+            _confirmed.Remove(item);
+        }
+    }
+
+    private OpenTradeRequest Request() => new(
+        _symbol ?? string.Empty,
+        _direction,
+        new DateTimeOffset(DateTime.SpecifyKind(_entryTime, DateTimeKind.Local)),
+        _entry,
+        _quantity,
+        _stopLoss,
+        _takeProfit,
+        _fxRate,
+        _fees,
+        _platform,
+        _notes,
+        Prefill?.SuggestionId);
 
     private async Task SaveAsync()
     {
@@ -117,21 +282,45 @@
 
         try
         {
-            DateTimeOffset entryTime = new(DateTime.SpecifyKind(_entryTime, DateTimeKind.Local));
+            TradeDossier? dossier = Dossier is not null && string.Equals(Dossier.Symbol, _symbol, StringComparison.OrdinalIgnoreCase)
+                ? Dossier
+                : await Api.GetDossierAsync(_symbol ?? string.Empty, _direction);
 
-            _error = await Api.OpenTradeAsync(new OpenTradeRequest(
-                _symbol ?? string.Empty,
-                _direction,
-                entryTime,
-                _entry,
-                _quantity,
-                _stopLoss,
-                _takeProfit,
-                _fxRate,
-                _fees,
-                _platform,
-                _notes,
-                Prefill?.SuggestionId));
+            SystemTradeResult result = await Api.OpenSystemTradeAsync(new SystemTradeRequest(
+                Request(),
+                _setupId,
+                _confirmed.ToList(),
+                _justification,
+                dossier is null ? null : JsonSerializer.Serialize(dossier, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                _emotion));
+
+            if (result.Trade is not null)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+                return;
+            }
+
+            _check = result.Check ?? _check;
+            _error = string.Join(" ", result.Errors);
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível guardar. Verifica se o servidor está a correr.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveOutsideSystemAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            _error = await Api.OpenTradeAsync(Request());
 
             if (_error is null)
             {

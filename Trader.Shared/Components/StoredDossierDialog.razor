@@ -1,0 +1,51 @@
+@inject TraderApiClient Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">O que sabias quando entraste</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_dossier is null)
+        {
+            <MudText Color="Color.Secondary">Não há dossiê guardado para esta trade.</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">Cópia do dossiê no momento do registo, não é atualizada.</MudText>
+            <DossierView Dossier="_dossier" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private TradeDossier? _dossier;
+    private bool _loading = true;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public long TradeId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _dossier = await Api.GetStoredDossierAsync(TradeId);
+        }
+        catch (HttpRequestException)
+        {
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Close() => MudDialog.Cancel();
+}

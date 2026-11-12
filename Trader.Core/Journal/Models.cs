@@ -19,6 +19,7 @@ public sealed class JournalTrade
     public double EntryPrice { get; set; }
     public double Quantity { get; set; }
     public double? StopLoss { get; set; }
+    public double? InitialStopLoss { get; set; }
     public double? TakeProfit { get; set; }
     public double FxRate { get; set; } = 1;
     public double Fees { get; set; }
@@ -56,6 +57,8 @@ public sealed record CloseTradeRequest(
     double AdditionalFees,
     string? Notes);
 
+public sealed record TradeLevelsRequest(double? StopLoss, double? TakeProfit);
+
 public sealed record TradeDetailsRequest(string? Setup, string? Tags, string? Emotion, string? Notes, string? ChartImage, bool ClearImage = false);
 
 public sealed record AccountProfile(double Capital, double RiskPercent, string Currency, double MaxDailyLossPercent = 0, int MaxTradesPerDay = 0);
@@ -86,7 +89,8 @@ public sealed record JournalTradeDto(
     string Setup = "",
     string Tags = "",
     string Emotion = "",
-    bool HasImage = false);
+    bool HasImage = false,
+    double? InitialStopLoss = null);
 
 public sealed record LinkedComparison(
     long TradeId,

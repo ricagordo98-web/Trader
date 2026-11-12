@@ -1,0 +1,117 @@
+@using System.Globalization
+@inject TraderApiClient Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Rever @Review.Symbol</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            @(Review.Direction == TradeDirection.Buy ? "Compra" : "Venda")@(Review.SetupName.Length > 0 ? $" · {Review.SetupName}" : string.Empty)
+            @if (Review.RMultiple is { } r)
+            {
+                <text> · </text><b style="color:var(--mud-palette-@(r >= 0 ? "success" : "error"))">@r.ToString("+0.00;-0.00", Pt) R</b>
+            }
+            @if (Review.RuleBreaks > 0)
+            {
+                <text> · </text><MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="ma-0">quebrou @Review.RuleBreaks regra(s)</MudChip>
+            }
+        </MudText>
+
+        @if (_record is { Justification.Length: > 0 } record)
+        {
+            <MudText Typo="Typo.caption" Class="symbol-name d-block mb-2">Justificação que escreveste ao entrar: «@record.Justification»</MudText>
+        }
+
+        <MudText Typo="Typo.subtitle2">Seguiste o plano nesta trade?</MudText>
+        <MudToggleGroup T="bool?" @bind-Value="_followed" SelectionMode="SelectionMode.SingleSelection" Size="Size.Small" Color="Color.Primary" Class="mb-3">
+            <MudToggleItem Value="@((bool?)true)" Text="Sim" />
+            <MudToggleItem Value="@((bool?)false)" Text="Não" />
+        </MudToggleGroup>
+
+        <MudText Typo="Typo.subtitle2">Geriste a trade como o plano manda (break-even, parcial, tempo)?</MudText>
+        <MudToggleGroup T="bool?" @bind-Value="_management" SelectionMode="SelectionMode.SingleSelection" Size="Size.Small" Color="Color.Primary" Class="mb-3">
+            <MudToggleItem Value="@((bool?)true)" Text="Sim" />
+            <MudToggleItem Value="@((bool?)false)" Text="Não" />
+            <MudToggleItem Value="@((bool?)null)" Text="Não se aplicou" />
+        </MudToggleGroup>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12"><MudTextField T="string" @bind-Value="_well" Label="O que correu bem" Lines="2" MaxLength="1000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+            <MudItem xs="12"><MudTextField T="string" @bind-Value="_wrong" Label="O que correu mal" Lines="2" MaxLength="1000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+            <MudItem xs="12"><MudTextField T="string" @bind-Value="_lesson" Label="Lição para a próxima" Lines="2" MaxLength="1000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+        </MudGrid>
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_busy || _followed is null)" OnClick="SaveAsync">Guardar revisão</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private TradeRecordDto? _record;
+    private bool? _followed;
+    private bool? _management;
+    private string _well = string.Empty;
+    private string _wrong = string.Empty;
+    private string _lesson = string.Empty;
+    private string? _error;
+    private bool _busy;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public PendingReview Review { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _record = (await Api.GetTradeRecordsAsync()).FirstOrDefault(r => r.TradeId == Review.TradeId);
+
+            if (_record is not null)
+            {
+                _followed = _record.FollowedPlan ?? (_record.RuleBreaks == 0 ? null : false);
+                _management = _record.ManagementFollowed;
+                _well = _record.WentWell;
+                _wrong = _record.WentWrong;
+                _lesson = _record.Lesson;
+            }
+        }
+        catch (HttpRequestException)
+        {
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            _error = await Api.ReviewTradeAsync(Review.TradeId, new TradeReviewRequest(_followed == true, _management, _well, _wrong, _lesson));
+
+            if (_error is null)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível guardar. Verifica se o servidor está a correr.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

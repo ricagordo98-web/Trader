@@ -1,0 +1,69 @@
+@inject TraderApiClient Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Stop e alvo de @Trade.Symbol</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.caption" Class="symbol-name mb-3">
+            Atualiza aqui o que mudaste na corretora. O risco inicial (@(Trade.InitialStopLoss ?? Trade.StopLoss)) fica guardado, por isso mover o stop para a entrada não estraga o cálculo do R.
+        </MudText>
+        <MudGrid Spacing="2">
+            <MudItem xs="6"><MudNumericField T="double?" @bind-Value="_stop" Label="Stop loss" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+            <MudItem xs="6"><MudNumericField T="double?" @bind-Value="_target" Label="Take profit" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" /></MudItem>
+        </MudGrid>
+        <MudButton Size="Size.Small" Variant="Variant.Text" Class="mt-2" OnClick="@(() => _stop = Trade.EntryPrice)">Stop na entrada (break-even)</MudButton>
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="_busy" OnClick="SaveAsync">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private double? _stop;
+    private double? _target;
+    private string? _error;
+    private bool _busy;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public JournalTradeDto Trade { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        _stop = Trade.StopLoss;
+        _target = Trade.TakeProfit;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        _busy = true;
+
+        try
+        {
+            _error = await Api.UpdateTradeLevelsAsync(Trade.Id, new TradeLevelsRequest(_stop, _target));
+
+            if (_error is null)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível guardar. Verifica se o servidor está a correr.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

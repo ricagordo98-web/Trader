@@ -1,3 +1,5 @@
+using Trader.Infrastructure.TradingSystem;
+using Trader.Infrastructure.Assistant;
 using Trader.Infrastructure.Agender;
 using Trader.Infrastructure.Analysis;
 using Trader.Infrastructure.Projection;
@@ -110,6 +112,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IEvidenceSource, StoredArticleEvidence>();
         services.AddHttpClient<IMoveNarrator, OllamaMoveNarrator>(client => client.Timeout = TimeSpan.FromMinutes(3));
         services.AddScoped<IMoveExplainer, MoveExplainer>();
+        services.Configure<AssistantOptions>(configuration.GetSection(AssistantOptions.SectionName));
+        services.AddSingleton<ClaudeAssistantModel>();
+        services.AddHttpClient<OllamaAssistantModel>(client => client.Timeout = TimeSpan.FromMinutes(3));
+        services.AddScoped<IAssistantModel, FallbackAssistantModel>();
+        services.AddScoped<ITradingSystemService, TradingSystemService>();
+        services.AddScoped<ITradeDossierService, TradeDossierService>();
+        services.AddScoped<IAssistantService, AssistantService>();
         services.AddSingleton<IRadarService, RadarService>();
         services.AddHostedService<RadarWorker>();
         services.AddSingleton<HaltMonitor>();

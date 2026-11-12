@@ -1,0 +1,160 @@
+@using System.Globalization
+@inject TraderApiClient Api
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.subtitle1" Class="mb-2">Trades por rever</MudText>
+
+@if (_pending is null)
+{
+    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="80px" />
+}
+else if (_pending.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="symbol-name mb-4">Todas as trades fechadas estão revistas.</MudText>
+}
+else
+{
+    <MudPaper Elevation="0" Outlined="true" Class="mb-4">
+        <MudTable Items="_pending" Dense="true" Elevation="0" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Ativo</MudTh>
+                <MudTh>Fechada</MudTh>
+                <MudTh>Resultado</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Symbol · @(context.Direction == TradeDirection.Buy ? "compra" : "venda")@(context.SetupName.Length > 0 ? $" · {context.SetupName}" : string.Empty)</MudTd>
+                <MudTd>@(context.ClosedAt?.ToLocalTime().ToString("dd/MM HH:mm", Pt) ?? "—")</MudTd>
+                <MudTd>
+                    @if (context.RMultiple is { } r)
+                    {
+                        <MudText Typo="Typo.body2" Color="@(r >= 0 ? Color.Success : Color.Error)">@r.ToString("+0.00;-0.00", Pt) R</MudText>
+                    }
+                </MudTd>
+                <MudTd Style="text-align:right"><MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => ReviewAsync(context))">Rever</MudButton></MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+<MudText Typo="Typo.subtitle1" Class="mb-2">Revisão semanal</MudText>
+
+@if (_week is not null)
+{
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-3">
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Semana de @_week.WeekStart.ToString("dd/MM/yyyy", Pt)</MudText>
+        <MudText Typo="Typo.body2">
+            @_week.Opened abertas · @_week.Closed fechadas (@_week.Wins ganhas) · @_week.TotalR.ToString("+0.00;-0.00", Pt) R · @_week.NetPnl.ToString("+0.00;-0.00", Pt)
+            · dentro das regras @_week.InRules, fora @_week.OutOfRules@(_week.AdherencePercent is { } a ? $" ({a.ToString("0", Pt)}% de adesão)" : string.Empty)
+        </MudText>
+        @foreach (string lesson in _week.Lessons)
+        {
+            <MudText Typo="Typo.caption" Class="symbol-name d-block">Lição · @lesson</MudText>
+        }
+    </MudPaper>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_worked" Label="O que funcionou" Lines="3" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_failed" Label="O que falhou" Lines="3" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_breaks" Label="Regras que quebrei e porquê" Lines="3" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+        <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_decision" Label="Decisão: manter ou mudar o plano (e o quê)" Lines="3" MaxLength="2000" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.caption" Class="symbol-name d-block mt-2 mb-2">
+        Ao guardar a revisão, o plano fica editável durante 24 horas. É o único momento em que o podes mudar.
+    </MudText>
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SaveWeeklyAsync">Guardar revisão semanal</MudButton>
+}
+
+@if (_history.Count > 0)
+{
+    <MudText Typo="Typo.subtitle1" Class="mt-5 mb-2">Revisões anteriores</MudText>
+
+    <MudExpansionPanels MultiExpansion="true">
+        @foreach (WeeklyReviewDto review in _history)
+        {
+            <MudExpansionPanel Text="@($"Semana de {review.WeekStart:dd/MM/yyyy} · {review.Summary.TotalR.ToString("+0.00;-0.00", Pt)} R · {review.Summary.Closed} fechadas")">
+                @if (review.WhatWorked.Length > 0) { <MudText Typo="Typo.body2"><b>Funcionou:</b> @review.WhatWorked</MudText> }
+                @if (review.WhatFailed.Length > 0) { <MudText Typo="Typo.body2"><b>Falhou:</b> @review.WhatFailed</MudText> }
+                @if (review.RuleBreaks.Length > 0) { <MudText Typo="Typo.body2"><b>Regras quebradas:</b> @review.RuleBreaks</MudText> }
+                @if (review.Decision.Length > 0) { <MudText Typo="Typo.body2"><b>Decisão:</b> @review.Decision</MudText> }
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private IReadOnlyList<PendingReview>? _pending;
+    private WeekSummary? _week;
+    private IReadOnlyList<WeeklyReviewDto> _history = [];
+    private string _worked = string.Empty;
+    private string _failed = string.Empty;
+    private string _breaks = string.Empty;
+    private string _decision = string.Empty;
+    private bool _busy;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _pending = await Api.GetPendingReviewsAsync();
+            _week = await Api.GetCurrentWeekAsync();
+            _history = await Api.GetWeeklyReviewsAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _pending ??= [];
+            Snackbar.Add("Não foi possível carregar as revisões.", Severity.Error);
+        }
+    }
+
+    private async Task ReviewAsync(PendingReview review)
+    {
+        DialogParameters<TradeReviewDialog> parameters = new() { { x => x.Review, review } };
+        IDialogReference dialog = await DialogService.ShowAsync<TradeReviewDialog>("Rever trade", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+
+        if (!(await dialog.Result)?.Canceled ?? false)
+        {
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private async Task SaveWeeklyAsync()
+    {
+        _busy = true;
+
+        try
+        {
+            string? error = await Api.SaveWeeklyReviewAsync(new SaveWeeklyReviewRequest(_worked, _failed, _breaks, _decision));
+
+            if (error is null)
+            {
+                _worked = _failed = _breaks = _decision = string.Empty;
+                Snackbar.Add("Revisão semanal guardada. O plano está editável durante 24 horas.", Severity.Success);
+                await LoadAsync();
+                await OnChanged.InvokeAsync();
+            }
+            else
+            {
+                Snackbar.Add(error, Severity.Error);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Não foi possível guardar. Verifica se o servidor está a correr.", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

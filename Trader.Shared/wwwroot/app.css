@@ -315,3 +315,11 @@ a.news-title:hover { color: var(--mud-palette-primary); }
 .calendar-high { border-color: color-mix(in srgb, var(--mud-palette-error) 55%, transparent); box-shadow: inset 3px 0 0 var(--mud-palette-error); }
 .calendar-mine { background: color-mix(in srgb, var(--mud-palette-warning) 10%, transparent); }
 .mud-simple-table th { white-space: nowrap; }
+
+.chat-log { display: flex; flex-direction: column; gap: 12px; min-height: 240px; }
+.chat-row { display: flex; }
+.chat-row.user { justify-content: flex-end; }
+.chat-row .chat-bubble { max-width: min(760px, 92%); }
+.chat-row.user .chat-bubble { background: var(--mud-palette-primary-hover, rgba(76, 141, 255, .12)); }
+.chat-row.bot .chat-bubble { width: min(900px, 100%); }
+.assistant-page .chat-input .mud-input-control { margin-top: 0; }

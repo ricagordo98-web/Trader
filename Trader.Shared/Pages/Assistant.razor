@@ -1,0 +1,258 @@
+@page "/assistant"
+@implements IDisposable
+@inject TraderApiClient Api
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Assistente · Trader</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-6 page-fade assistant-page">
+    <div class="d-flex align-center flex-wrap gap-2 mb-1">
+        <MudText Typo="Typo.h4">Assistente</MudText>
+        <MudSpacer />
+        @if (_status is not null)
+        {
+            <MudTooltip Text="@_status.Detail">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(_status.ModelEnabled ? Color.Success : Color.Default)" Icon="@Icons.Material.Filled.Psychology">
+                    @_status.Provider@(_status.WebSearch ? " · web" : string.Empty)
+                </MudChip>
+            </MudTooltip>
+        }
+    </div>
+    <MudText Typo="Typo.body2" Class="symbol-name mb-3">
+        Diz-me o ativo e o que vais fazer, por exemplo «vou comprar NVDA», e junto o que interessa: tendência, notícias, eventos, o modelo, o que já tens aberto e as regras do teu sistema. Se quiseres avançar, crio a trade na Carteira (só grava depois de confirmares).
+    </MudText>
+
+    @if (_system is { CanTrade: false } blocked)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-3">
+            O teu sistema está a bloquear novas trades: @string.Join(" ", blocked.Blockers)
+        </MudAlert>
+    }
+
+    @if (_status is { ModelEnabled: false })
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">@_status.Detail</MudAlert>
+    }
+
+    <div class="chat-log" @ref="_log">
+        @if (_messages.Count == 0)
+        {
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Experimenta</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    @foreach (string example in Examples)
+                    {
+                        string text = example;
+                        <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" OnClick="@(() => AskAsync(text))">@text</MudChip>
+                    }
+                </div>
+            </MudPaper>
+        }
+
+        @foreach (ChatEntry entry in _messages)
+        {
+            <div class="chat-row @(entry.IsUser ? "user" : "bot")">
+                <MudPaper Elevation="0" Outlined="true" Class="chat-bubble pa-3">
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap">@entry.Text</MudText>
+
+                    @if (entry.Reply is { } reply)
+                    {
+                        @if (reply.Notice is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block mt-1">@reply.Notice</MudText>
+                        }
+
+                        @if (reply.Sources.Count > 0)
+                        {
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                @foreach (AssistantSource source in reply.Sources.Take(8))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Href="@source.Url" Target="_blank" Icon="@Icons.Material.Filled.OpenInNew">@Shorten(source.Title)</MudChip>
+                                }
+                            </div>
+                        }
+
+                        <div class="d-flex flex-wrap align-center gap-2 mt-2">
+                            @if (reply.Dossier is not null)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Assignment" OnClick="@(() => entry.ShowDossier = !entry.ShowDossier)">
+                                    @(entry.ShowDossier ? "Esconder dossiê" : "Ver dossiê completo")
+                                </MudButton>
+                            }
+
+                            @if (reply.ProposeTrade && reply.Dossier is not null)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddCircle" OnClick="@(() => CreateTradeAsync(reply.Dossier))">
+                                    Criar trade na Carteira
+                                </MudButton>
+                            }
+
+                            <MudText Typo="Typo.caption" Class="symbol-name">@reply.Provider · @reply.AsOf.ToLocalTime().ToString("HH:mm")</MudText>
+                        </div>
+
+                        @if (entry.ShowDossier && reply.Dossier is not null)
+                        {
+                            <div class="mt-3"><DossierView Dossier="reply.Dossier" /></div>
+                        }
+                    }
+                </MudPaper>
+            </div>
+        }
+
+        @if (_busy)
+        {
+            <div class="chat-row bot"><MudPaper Elevation="0" Outlined="true" Class="chat-bubble pa-3"><MudProgressLinear Indeterminate="true" Style="width:120px" /><MudText Typo="Typo.caption" Class="symbol-name">A recolher dados…</MudText></MudPaper></div>
+        }
+    </div>
+
+    <div class="chat-input d-flex align-end gap-2 mt-3">
+        <MudTextField T="string" @bind-Value="_input" Placeholder="Ex.: vou comprar AAPL, o que devo ver antes?" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Sizing="InputSizing.Auto" MaxLength="2000"
+                      Immediate="true" OnKeyDown="OnKeyDown" Disabled="_busy" Class="flex-grow-1" />
+        <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary" Variant="Variant.Filled" aria-label="Enviar" Disabled="@(_busy || string.IsNullOrWhiteSpace(_input))" OnClick="@(() => AskAsync(_input))" />
+        @if (_messages.Count > 0)
+        {
+            <MudTooltip Text="Nova conversa"><MudIconButton Icon="@Icons.Material.Filled.DeleteSweep" aria-label="Nova conversa" Disabled="_busy" OnClick="Clear" /></MudTooltip>
+        }
+    </div>
+    <MudText Typo="Typo.caption" Class="symbol-name mt-1">Não é aconselhamento financeiro. A decisão e o risco são teus, e o plano manda.</MudText>
+</MudContainer>
+
+@code {
+    private static readonly string[] Examples =
+    [
+        "Vou comprar NVDA, o que devo ver antes?",
+        "Vou vender EURUSD",
+        "O que mexe hoje no ouro?",
+        "Como estou esta semana face ao meu plano?",
+        "Há resultados ou eventos esta semana que afetem o S&P 500?"
+    ];
+
+    private sealed class ChatEntry(bool isUser, string text, AssistantReply? reply = null)
+    {
+        public bool IsUser { get; } = isUser;
+        public string Text { get; } = text;
+        public AssistantReply? Reply { get; } = reply;
+        public bool ShowDossier { get; set; }
+    }
+
+    private readonly CancellationTokenSource _cts = new();
+    private readonly List<ChatEntry> _messages = [];
+    private ElementReference _log;
+    private AssistantStatus? _status;
+    private SystemStatus? _system;
+    private string? _input;
+    private bool _busy;
+    private string? _lastSymbol;
+
+    [SupplyParameterFromQuery] public string? Symbol { get; set; }
+
+    [SupplyParameterFromQuery] public string? Ask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _status = await Api.GetAssistantStatusAsync(_cts.Token);
+            _system = await Api.GetSystemStatusAsync(_cts.Token);
+        }
+        catch (HttpRequestException)
+        {
+        }
+
+        if (!string.IsNullOrWhiteSpace(Ask))
+        {
+            await AskAsync(Ask);
+        }
+        else if (!string.IsNullOrWhiteSpace(Symbol))
+        {
+            await AskAsync($"Vou fazer uma trade em {Symbol}. Dá-me o dossiê.");
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (args is { Key: "Enter", ShiftKey: false } && !_busy && !string.IsNullOrWhiteSpace(_input))
+        {
+            await AskAsync(_input);
+        }
+    }
+
+    private async Task AskAsync(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || _busy)
+        {
+            return;
+        }
+
+        List<ChatTurn> history = _messages.Select(m => new ChatTurn(m.IsUser ? "user" : "assistant", m.Text)).ToList();
+        _messages.Add(new ChatEntry(true, text.Trim()));
+        _input = null;
+        _busy = true;
+
+        try
+        {
+            (AssistantReply? reply, string? error) = await Api.AskAssistantAsync(new AssistantRequest(text.Trim(), history, _lastSymbol, null), _cts.Token);
+
+            if (reply is null)
+            {
+                _messages.Add(new ChatEntry(false, error ?? "Não foi possível obter resposta."));
+            }
+            else
+            {
+                _lastSymbol = reply.Symbol ?? _lastSymbol;
+                _messages.Add(new ChatEntry(false, reply.Text, reply) { ShowDossier = false });
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _messages.Add(new ChatEntry(false, "Não foi possível contactar o servidor."));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CreateTradeAsync(TradeDossier dossier)
+    {
+        IReadOnlyList<WatchlistItem> watchlist = await Api.GetWatchlistAsync(_cts.Token);
+        TradeDraft draft = dossier.Draft;
+        TradePrefill prefill = new(draft.Symbol, draft.Direction, Tidy(draft.Entry), Tidy(draft.StopLoss), Tidy(draft.TakeProfit), draft.Quantity, draft.FxRate, null);
+
+        DialogParameters<TradeDialog> parameters = new()
+        {
+            { x => x.Prefill, prefill },
+            { x => x.Symbols, watchlist.Select(w => w.Symbol).ToList() },
+            { x => x.Dossier, dossier }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<TradeDialog>("Registar trade", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+
+        if (!(await dialog.Result)?.Canceled ?? false)
+        {
+            Snackbar.Add("Trade registada na Carteira, com o dossiê guardado.", Severity.Success);
+            Navigation.NavigateTo("/journal");
+        }
+    }
+
+    private void Clear()
+    {
+        _messages.Clear();
+        _lastSymbol = null;
+    }
+
+    private static double Tidy(double value) => Math.Round(value, value >= 100 ? 2 : value >= 1 ? 4 : 6);
+
+    private static string Shorten(string text) => text.Length > 42 ? text[..42] + "…" : text;
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

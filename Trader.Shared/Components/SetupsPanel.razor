@@ -1,0 +1,173 @@
+@using System.Globalization
+@inject TraderApiClient Api
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="d-flex align-center flex-wrap gap-2 mb-3">
+    <MudText Typo="Typo.body2" Class="symbol-name">O teu playbook: só entras em situações que escreveste aqui. Cada setup acumula as suas próprias estatísticas.</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAsync(null))">Novo setup</MudButton>
+</div>
+
+@if (_setups is null)
+{
+    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="160px" />
+}
+else if (_setups.Count == 0)
+{
+    <MudPaper Elevation="0" Outlined="true" Class="pa-6">
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Ainda sem setups</MudText>
+        <MudText Color="Color.Secondary">Começa com um só, o que melhor conheces. Escreve quando entras, onde pões o stop e quando sais.</MudText>
+    </MudPaper>
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (TradingSetupDto setup in _setups)
+        {
+            TradingSetupDto current = setup;
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4" Style="@(current.Active ? string.Empty : "opacity:.6")">
+                    <div class="d-flex align-center gap-2 mb-1">
+                        <MudText Typo="Typo.subtitle1">@current.Name</MudText>
+                        @if (!current.Active)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0">inativo</MudChip>
+                        }
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="@($"Editar {current.Name}")" OnClick="@(() => EditAsync(current))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" aria-label="@($"Apagar {current.Name}")" OnClick="@(() => DeleteAsync(current))" />
+                    </div>
+
+                    @if (current.Description.Length > 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-1">@current.Description</MudText>
+                    }
+
+                    @if (current.EntryCriteria.Length > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block"><b>Entrada:</b> @current.EntryCriteria</MudText>
+                    }
+
+                    @if (current.ExitCriteria.Length > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block"><b>Saída:</b> @current.ExitCriteria</MudText>
+                    }
+
+                    @if (current.Image is not null)
+                    {
+                        <img src="@current.Image" alt="@($"Exemplo de {current.Name}")" style="max-width:100%;max-height:160px;margin-top:8px;border-radius:6px" />
+                    }
+
+                    <MudDivider Class="my-2" />
+
+                    @if (current.Performance is { Count: > 0 } perf)
+                    {
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block">
+                            Nas tuas trades: @perf.Count fechadas · @perf.WinRate.ToString("P0", Pt) ganhas · R médio @(perf.AverageR?.ToString("+0.00;-0.00", Pt) ?? "—")@(perf.CiLow is { } low && perf.CiHigh is { } high ? $" (intervalo {low.ToString("+0.00;-0.00", Pt)} a {high.ToString("+0.00;-0.00", Pt)})" : string.Empty)
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block">Ainda sem trades fechadas neste setup.</MudText>
+                    }
+
+                    @if (current.Strategy.Entry != SetupEntryRule.None)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-2" Disabled="@(_testing == current.Id)" OnClick="@(() => TestAsync(current))"
+                                   StartIcon="@Icons.Material.Filled.Science">@(_testing == current.Id ? "A testar…" : "Testar no histórico")</MudButton>
+                    }
+
+                    @if (_results.TryGetValue(current.Id, out SetupBacktestResult? result))
+                    {
+                        <MudAlert Severity="@(result.Result.CiLow > 0 ? Severity.Success : result.Result.CiHigh < 0 ? Severity.Error : Severity.Info)" Variant="Variant.Outlined" Dense="true" Class="mt-2">
+                            @result.Verdict
+                            <div class="mt-1">
+                                @result.Result.Count trades em @result.SymbolsTested ativos · win rate @result.Result.WinRate.ToString("P0", Pt) · fator de lucro @(result.Result.ProfitFactor?.ToString("0.00", Pt) ?? "—") · custo @result.CostR.ToString("0.00", Pt) R por trade já incluído.
+                            </div>
+                        </MudAlert>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private IReadOnlyList<TradingSetupDto>? _setups;
+    private readonly Dictionary<long, SetupBacktestResult> _results = [];
+    private long _testing;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _setups = await Api.GetSetupsAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _setups = [];
+            Snackbar.Add("Não foi possível carregar os setups.", Severity.Error);
+        }
+    }
+
+    private async Task EditAsync(TradingSetupDto? setup)
+    {
+        DialogParameters<SetupDialog> parameters = new() { { x => x.Setup, setup } };
+        IDialogReference dialog = await DialogService.ShowAsync<SetupDialog>(setup is null ? "Novo setup" : "Editar setup", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+
+        if (!(await dialog.Result)?.Canceled ?? false)
+        {
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private async Task DeleteAsync(TradingSetupDto setup)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Apagar setup",
+            $"Apagar «{setup.Name}»? Se já houver trades com este setup, fica só inativo para preservar o histórico.",
+            yesText: "Apagar",
+            cancelText: "Cancelar");
+
+        if (confirmed == true && await Api.DeleteSetupAsync(setup.Id))
+        {
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private async Task TestAsync(TradingSetupDto setup)
+    {
+        _testing = setup.Id;
+
+        try
+        {
+            (SetupBacktestResult? result, string? error) = await Api.BacktestSetupAsync(setup.Id, new SetupBacktestRequest(null, 5));
+
+            if (result is not null)
+            {
+                _results[setup.Id] = result;
+            }
+            else
+            {
+                Snackbar.Add(error ?? "Não foi possível testar.", Severity.Error);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Não foi possível contactar o servidor.", Severity.Error);
+        }
+        finally
+        {
+            _testing = 0;
+        }
+    }
+}

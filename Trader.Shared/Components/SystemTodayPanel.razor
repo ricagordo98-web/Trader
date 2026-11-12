@@ -1,0 +1,138 @@
+@using System.Globalization
+
+@if (Status.CanTrade)
+{
+    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-4">Podes abrir trades hoje, desde que cumpram as regras do plano.</MudAlert>
+}
+else
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4">
+        <b>Hoje não abres mais trades.</b>
+        @foreach (string blocker in Status.Blockers)
+        {
+            <div>@blocker</div>
+        }
+    </MudAlert>
+}
+
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="6" md="3">
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.caption" Class="symbol-name">Trades hoje</MudText>
+            <MudText Typo="Typo.h5">@Status.TradesToday@(Status.MaxTradesPerDay > 0 ? $" / {Status.MaxTradesPerDay}" : string.Empty)</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.caption" Class="symbol-name">Resultado hoje</MudText>
+            <MudText Typo="Typo.h5" Color="@(Status.DailyPnl >= 0 ? Color.Success : Color.Error)">@Money(Status.DailyPnl)</MudText>
+            @if (Status.DailyLossLimit > 0)
+            {
+                <MudProgressLinear Value="@LossPercent(Status.DailyPnl, Status.DailyLossLimit)" Color="Color.Error" Class="mt-1" />
+                <MudText Typo="Typo.caption" Class="symbol-name">limite -@Money(Status.DailyLossLimit, false)</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.caption" Class="symbol-name">Resultado da semana</MudText>
+            <MudText Typo="Typo.h5" Color="@(Status.WeeklyPnl >= 0 ? Color.Success : Color.Error)">@Money(Status.WeeklyPnl)</MudText>
+            @if (Status.WeeklyLossLimit > 0)
+            {
+                <MudProgressLinear Value="@LossPercent(Status.WeeklyPnl, Status.WeeklyLossLimit)" Color="Color.Error" Class="mt-1" />
+                <MudText Typo="Typo.caption" Class="symbol-name">limite -@Money(Status.WeeklyLossLimit, false)</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.caption" Class="symbol-name">Posições abertas</MudText>
+            <MudText Typo="Typo.h5">@Status.OpenPositions@(Status.MaxOpenPositions > 0 ? $" / {Status.MaxOpenPositions}" : string.Empty)</MudText>
+            @if (Status.LosingStreak > 0)
+            {
+                <MudText Typo="Typo.caption" Class="symbol-name">@Status.LosingStreak perda(s) seguida(s)</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@if (Status.Management.Count > 0)
+{
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Gerir trades abertas</MudText>
+        @foreach (ManagementNote note in Status.Management)
+        {
+            <div class="d-flex align-center gap-2 mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Warning" Size="Size.Small" />
+                <MudText Typo="Typo.body2"><b>@note.Symbol</b> · @note.Message</MudText>
+                <MudSpacer />
+                <MudButton Size="Size.Small" Href="@($"/journal?trade={note.TradeId}")">Abrir na Carteira</MudButton>
+            </div>
+        }
+    </MudPaper>
+}
+
+<MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">O que falta fazer</MudText>
+
+    @if (Status.NextSteps.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="symbol-name">Nada pendente. Segue o plano.</MudText>
+    }
+    else
+    {
+        @foreach (string step in Status.NextSteps)
+        {
+            <div class="d-flex align-center gap-2 mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.ArrowRight" Size="Size.Small" />
+                <MudText Typo="Typo.body2">@step</MudText>
+            </div>
+        }
+    }
+</MudPaper>
+
+<MudPaper Elevation="0" Outlined="true" Class="pa-4">
+    <div class="d-flex align-center flex-wrap gap-2 mb-2">
+        <MudText Typo="Typo.subtitle1">Fase: @SystemStatistics.PhaseLabel(Status.Phase.Phase)</MudText>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0">@PhaseHint</MudChip>
+        <MudSpacer />
+        @if (Status.Phase.CanPromote)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="OnPromote">Avançar de fase</MudButton>
+        }
+    </div>
+
+    @if (Status.Phase.Needed > 0)
+    {
+        <MudProgressLinear Value="@(Math.Min(100.0, Status.Phase.Trades * 100.0 / Status.Phase.Needed))" Color="Color.Primary" Class="mb-2" />
+    }
+
+    <MudText Typo="Typo.body2" Class="symbol-name">@Status.Phase.Message</MudText>
+
+    @if (Status.AdherencePercent is { } adherence)
+    {
+        <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">Adesão ao plano (todas as trades fechadas): @adherence.ToString("0", Pt)%</MudText>
+    }
+</MudPaper>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    [Parameter, EditorRequired] public SystemStatus Status { get; set; } = default!;
+
+    [Parameter] public EventCallback OnPromote { get; set; }
+
+    [Parameter] public EventCallback<int> OnGoto { get; set; }
+
+    private string PhaseHint => Status.Phase.Phase switch
+    {
+        SystemPhase.Paper => "simulação, sem dinheiro",
+        SystemPhase.SmallReal => "dinheiro real, risco reduzido",
+        _ => "risco normal do plano"
+    };
+
+    private string Money(double value, bool signed = true) =>
+        $"{value.ToString(signed ? "+#,0.00;-#,0.00;0.00" : "#,0.00", Pt)} {Status.Currency}";
+
+    private static double LossPercent(double pnl, double limit) => pnl >= 0 || limit <= 0 ? 0 : Math.Min(100, -pnl * 100 / limit);
+}

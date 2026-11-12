@@ -22,6 +22,9 @@ public static class JournalEndpoints
         group.MapPut("/trades/{id:long}/details", async (long id, TradeDetailsRequest request, ClaimsPrincipal user, IJournalService service, CancellationToken cancellationToken) =>
             ToResult(await service.UpdateDetailsAsync(UserId(user), id, request, cancellationToken)));
 
+        group.MapPut("/trades/{id:long}/levels", async (long id, TradeLevelsRequest request, ClaimsPrincipal user, IJournalService service, CancellationToken cancellationToken) =>
+            ToResult(await service.UpdateLevelsAsync(UserId(user), id, request, cancellationToken)));
+
         group.MapGet("/trades/{id:long}/image", async (long id, ClaimsPrincipal user, IJournalService service, CancellationToken cancellationToken) =>
             await service.GetImageAsync(UserId(user), id, cancellationToken) is { } image ? Results.Ok(new { image }) : Results.NotFound());
 

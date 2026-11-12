@@ -8,7 +8,7 @@ public static class JournalCalculator
 {
     public static TradeOutcome Compute(JournalTrade trade)
     {
-        double? riskAmount = trade.StopLoss is { } stopLoss
+        double? riskAmount = (trade.InitialStopLoss ?? trade.StopLoss) is { } stopLoss
             ? Math.Abs(trade.EntryPrice - stopLoss) * trade.Quantity * trade.FxRate
             : null;
 

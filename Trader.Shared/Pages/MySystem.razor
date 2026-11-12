@@ -1,0 +1,121 @@
+@page "/system"
+@implements IDisposable
+@inject TraderApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>O meu sistema · Trader</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-6 page-fade">
+    <MudText Typo="Typo.h4" Class="mb-1">O meu sistema</MudText>
+    <MudText Typo="Typo.body2" Class="symbol-name mb-4">
+        O teu plano de trading, escrito e versionado, com os setups que sabes operar. Cada trade é verificada contra ele, e aqui vês se o sistema funciona e se o estás a seguir.
+        As trades fazem-se na <MudLink Href="/journal" Typo="Typo.body2">Carteira</MudLink> ou pelo <MudLink Href="/assistant" Typo="Typo.body2">Assistente</MudLink>.
+    </MudText>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+    }
+
+    <MudTabs Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_tab" KeepPanelsAlive="false">
+        <MudTabPanel Text="Hoje" BadgeData="@(_status is { CanTrade: false } ? "!" : null)" BadgeColor="Color.Error">
+            @if (_status is null)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="240px" />
+            }
+            else
+            {
+                <SystemTodayPanel Status="_status" OnPromote="PromoteAsync" OnGoto="@(i => _tab = i)" />
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Plano">
+            <TradingPlanPanel OnSaved="LoadStatusAsync" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Setups">
+            <SetupsPanel OnChanged="LoadStatusAsync" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Revisões" BadgeData="@(_status is { } s && (s.PendingReviews > 0 || s.WeeklyReviewDue) ? (s.PendingReviews > 0 ? s.PendingReviews.ToString() : "!") : null)" BadgeColor="Color.Warning">
+            <ReviewsPanel OnChanged="LoadStatusAsync" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Desempenho">
+            @if (_performance is null)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="240px" />
+            }
+            else
+            {
+                <SystemPerformancePanel Performance="_performance" />
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private SystemStatus? _status;
+    private SystemPerformance? _performance;
+    private string? _error;
+    private int _tab;
+
+    [SupplyParameterFromQuery] public string? Tab { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tab = Tab switch
+        {
+            "plano" => 1,
+            "setups" => 2,
+            "revisoes" => 3,
+            "desempenho" => 4,
+            _ => 0
+        };
+
+        await LoadStatusAsync();
+
+        try
+        {
+            _performance = await Api.GetSystemPerformanceAsync(_cts.Token);
+        }
+        catch (HttpRequestException)
+        {
+        }
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        try
+        {
+            _status = await Api.GetSystemStatusAsync(_cts.Token);
+            _error = null;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível carregar o sistema. Verifica se o servidor está a correr.";
+        }
+    }
+
+    private async Task PromoteAsync()
+    {
+        string? error = await Api.PromotePhaseAsync(_cts.Token);
+
+        if (error is null)
+        {
+            Snackbar.Add("Mudaste de fase.", Severity.Success);
+            await LoadStatusAsync();
+        }
+        else
+        {
+            Snackbar.Add(error, Severity.Warning);
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

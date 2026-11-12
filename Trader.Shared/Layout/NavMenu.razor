@@ -1,30 +1,98 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+
 <MudNavMenu Class="pt-1">
-    <div class="nav-section">Hoje</div>
-    <MudNavLink Href="/session" Icon="@Icons.Material.Filled.Today">Sessão</MudNavLink>
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Newspaper">Notícias</MudNavLink>
-    <MudNavLink Href="/community" Icon="@Icons.Material.Filled.Forum">Comunidade</MudNavLink>
-    <MudNavLink Href="/calendar" Icon="@Icons.Material.Filled.Event">Calendário</MudNavLink>
+    <MudNavGroup Title="Acompanhar" Icon="@Icons.Material.Filled.Today" Expanded="@IsOpen("track")" ExpandedChanged="@(open => Set("track", open))">
+        <MudNavLink Href="/session" Icon="@Icons.Material.Filled.Today">Sessão</MudNavLink>
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Newspaper">Notícias</MudNavLink>
+        <MudNavLink Href="/community" Icon="@Icons.Material.Filled.Forum">Comunidade</MudNavLink>
+        <MudNavLink Href="/calendar" Icon="@Icons.Material.Filled.Event">Calendário</MudNavLink>
+    </MudNavGroup>
 
-    <div class="nav-section">Mercados</div>
-    <MudNavLink Href="/trading" Icon="@Icons.Material.Filled.CandlestickChart">Ativos</MudNavLink>
-    <MudNavLink Href="/charts" Icon="@Icons.Material.Filled.GridView">Gráficos</MudNavLink>
-    <MudNavLink Href="/market" Icon="@Icons.Material.Filled.Dashboard">Mapa do mercado</MudNavLink>
+    <MudNavGroup Title="Mercados" Icon="@Icons.Material.Filled.CandlestickChart" Expanded="@IsOpen("markets")" ExpandedChanged="@(open => Set("markets", open))">
+        <MudNavLink Href="/trading" Icon="@Icons.Material.Filled.CandlestickChart">Ativos</MudNavLink>
+        <MudNavLink Href="/charts" Icon="@Icons.Material.Filled.GridView">Gráficos</MudNavLink>
+        <MudNavLink Href="/market" Icon="@Icons.Material.Filled.Dashboard">Mapa do mercado</MudNavLink>
+    </MudNavGroup>
 
-    <div class="nav-section">Ideias</div>
-    <MudNavLink Href="/prediction" Icon="@Icons.Material.Filled.AutoGraph">Predição</MudNavLink>
-    <MudNavLink Href="/analysis" Icon="@Icons.Material.Filled.FactCheck">Análise</MudNavLink>
-    <MudNavLink Href="/projection" Icon="@Icons.Material.Filled.Timeline">Projeção</MudNavLink>
-    <MudNavLink Href="/rotation" Icon="@Icons.Material.Filled.Autorenew">Rotação de ETFs</MudNavLink>
+    <MudNavGroup Title="Ideias" Icon="@Icons.Material.Filled.AutoGraph" Expanded="@IsOpen("ideas")" ExpandedChanged="@(open => Set("ideas", open))">
+        <MudNavLink Href="/prediction" Icon="@Icons.Material.Filled.AutoGraph">Predição</MudNavLink>
+        <MudNavLink Href="/projection" Icon="@Icons.Material.Filled.Timeline">Projeção</MudNavLink>
+        <MudNavLink Href="/rotation" Icon="@Icons.Material.Filled.Autorenew">Rotação de ETFs</MudNavLink>
+    </MudNavGroup>
 
-    <div class="nav-section">Aprender</div>
-    <MudNavLink Href="/learning" Icon="@Icons.Material.Filled.MenuBook">Learning</MudNavLink>
+    <MudNavGroup Title="Operar" Icon="@Icons.Material.Filled.Rule" Expanded="@IsOpen("trade")" ExpandedChanged="@(open => Set("trade", open))">
+        <MudNavLink Href="/assistant" Icon="@Icons.Material.Filled.Psychology">Assistente</MudNavLink>
+        <MudNavLink Href="/analysis" Icon="@Icons.Material.Filled.FactCheck">Análise de trade</MudNavLink>
+        <MudNavLink Href="/system" Icon="@Icons.Material.Filled.Rule">O meu sistema</MudNavLink>
+        <MudNavLink Href="/journal" Icon="@Icons.Material.Filled.AccountBalanceWallet">Carteira</MudNavLink>
+    </MudNavGroup>
 
-    <div class="nav-section">Operações</div>
-    <MudNavLink Href="/journal" Icon="@Icons.Material.Filled.AccountBalanceWallet">Carteira</MudNavLink>
-    <MudNavLink Href="/simulator" Icon="@Icons.Material.Filled.School">Simulador</MudNavLink>
+    <MudNavGroup Title="Aprender" Icon="@Icons.Material.Filled.MenuBook" Expanded="@IsOpen("learn")" ExpandedChanged="@(open => Set("learn", open))">
+        <MudNavLink Href="/learning" Icon="@Icons.Material.Filled.MenuBook">Learning</MudNavLink>
+        <MudNavLink Href="/simulator" Icon="@Icons.Material.Filled.School">Simulador</MudNavLink>
+        <MudNavLink Href="/help" Icon="@Icons.Material.Filled.HelpOutline">Ajuda e glossário</MudNavLink>
+    </MudNavGroup>
 
     <MudDivider Class="my-2" />
     <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Configurações</MudNavLink>
-    <MudNavLink Href="/help" Icon="@Icons.Material.Filled.HelpOutline">Ajuda</MudNavLink>
-    <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">Sobre</MudNavLink>
 </MudNavMenu>
+
+@code {
+    private static readonly (string Key, string[] Paths)[] Groups =
+    [
+        ("track", ["", "session", "community", "calendar"]),
+        ("markets", ["trading", "charts", "market"]),
+        ("ideas", ["prediction", "projection", "rotation"]),
+        ("trade", ["assistant", "analysis", "system", "journal"]),
+        ("learn", ["learning", "simulator", "help"])
+    ];
+
+    private readonly HashSet<string> _open = [];
+
+    protected override void OnInitialized()
+    {
+        OpenCurrent();
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args)
+    {
+        OpenCurrent();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OpenCurrent()
+    {
+        string path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/').Split('/')[0];
+
+        foreach ((string key, string[] paths) in Groups)
+        {
+            if (paths.Contains(path))
+            {
+                _open.Add(key);
+            }
+        }
+
+        if (_open.Count == 0 && path is not ("settings" or "about"))
+        {
+            _open.Add("track");
+        }
+    }
+
+    private bool IsOpen(string key) => _open.Contains(key);
+
+    private void Set(string key, bool open)
+    {
+        if (open)
+        {
+            _open.Add(key);
+        }
+        else
+        {
+            _open.Remove(key);
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

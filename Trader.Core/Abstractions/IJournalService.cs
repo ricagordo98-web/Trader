@@ -23,6 +23,8 @@ public interface IJournalService
 
     Task<JournalResult<JournalTradeDto>> UpdateDetailsAsync(string userId, long id, TradeDetailsRequest request, CancellationToken cancellationToken);
 
+    Task<JournalResult<JournalTradeDto>> UpdateLevelsAsync(string userId, long id, TradeLevelsRequest request, CancellationToken cancellationToken);
+
     Task<string?> GetImageAsync(string userId, long id, CancellationToken cancellationToken);
 
     Task<bool> DeleteAsync(string userId, long id, CancellationToken cancellationToken);

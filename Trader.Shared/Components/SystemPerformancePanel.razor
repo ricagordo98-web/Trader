@@ -1,0 +1,121 @@
+@using System.Globalization
+
+@if (Performance.All.Count == 0)
+{
+    <MudPaper Elevation="0" Outlined="true" Class="pa-6">
+        <MudText Typo="Typo.subtitle1" Class="mb-1">Ainda sem trades fechadas</MudText>
+        <MudText Color="Color.Secondary">As estatísticas do sistema aparecem quando fechares a primeira trade. O que importa aqui: o sistema funciona, e tu segues o sistema?</MudText>
+    </MudPaper>
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">@Performance.Verdict</MudAlert>
+
+    <MudGrid Spacing="3" Class="mb-4">
+        @foreach (PerformanceGroup group in new[] { Performance.InRules, Performance.OutOfRules, Performance.OutsideSystem })
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">@group.Label</MudText>
+                    @if (group.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="symbol-name">Sem trades.</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.h5" Color="@(group.AverageR >= 0 ? Color.Success : Color.Error)">@Signed(group.AverageR) R</MudText>
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block">por trade · @group.Count trades · @group.WinRate.ToString("P0", Pt) ganhas</MudText>
+                        <MudText Typo="Typo.caption" Class="symbol-name d-block">
+                            Fator de lucro @(group.ProfitFactor?.ToString("0.00", Pt) ?? "—") · total @group.TotalR.ToString("+0.0;-0.0", Pt) R
+                        </MudText>
+
+                        @if (group.CiLow is { } low && group.CiHigh is { } high)
+                        {
+                            <MudText Typo="Typo.caption" Class="symbol-name d-block">Intervalo de confiança 95%: @low.ToString("+0.00;-0.00", Pt) a @high.ToString("+0.00;-0.00", Pt) R</MudText>
+                        }
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (Performance.TradesNeeded is { } needed)
+    {
+        <MudText Typo="Typo.body2" Class="symbol-name mb-4">
+            @(needed == 0
+                ? "Com o R médio e a dispersão atuais, o intervalo de confiança já deixa de incluir zero."
+                : $"Se o desempenho atual se mantiver, faltam cerca de {needed} trades dentro das regras para o intervalo de confiança deixar de incluir zero.")
+        </MudText>
+    }
+
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">R acumulado (todas as trades) · pior queda @Performance.MaxDrawdownR.ToString("0.0", Pt) R</MudText>
+        @if (Performance.Curve.Count >= 2)
+        {
+            <CumulativeCurve Points="@Performance.Curve.Select(c => c.CumulativeR).ToList()" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="symbol-name">A curva aparece a partir da segunda trade fechada.</MudText>
+        }
+    </MudPaper>
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="6">@Table("Por setup", Performance.BySetup)</MudItem>
+        <MudItem xs="12" md="6">@Table("Por versão do plano", Performance.ByPlanVersion)</MudItem>
+        <MudItem xs="12" md="6">@Table("Por fase", Performance.ByPhase)</MudItem>
+        <MudItem xs="12" md="6">@Table("Por dia da semana", Performance.ByWeekday)</MudItem>
+        <MudItem xs="12">@Table("Por hora de entrada", Performance.ByHour)</MudItem>
+    </MudGrid>
+
+    @if (Performance.Excursion.Count > 0)
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4 mt-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">Stops e alvos (MAE / MFE)</MudText>
+            <MudText Typo="Typo.body2">
+                Em @Performance.Excursion.Count trades, o preço foi em média @Signed(Performance.Excursion.AverageMfeR) R a teu favor e @Signed(Performance.Excursion.AverageMaeR) R contra, antes de fechares.
+            </MudText>
+            <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                @Performance.Excursion.LosersThatReachedOneR perdedoras chegaram a +1R antes de virar (talvez compense mover o stop mais cedo) ·
+                @Performance.Excursion.WinnersThatWentNearStop vencedoras chegaram perto do stop (stops apertados demais fariam perder estas).
+            </MudText>
+        </MudPaper>
+    }
+}
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    [Parameter, EditorRequired] public SystemPerformance Performance { get; set; } = default!;
+
+    private static string Signed(double? value) => value?.ToString("+0.00;-0.00;0.00", Pt) ?? "—";
+
+    private RenderFragment Table(string title, IReadOnlyList<PerformanceGroup> rows) => __builder =>
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">@title</MudText>
+            @if (rows.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Class="symbol-name">Sem dados.</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <thead><tr><th></th><th style="text-align:right">Trades</th><th style="text-align:right">Ganhas</th><th style="text-align:right">R médio</th><th style="text-align:right">Total R</th></tr></thead>
+                    <tbody>
+                        @foreach (PerformanceGroup row in rows)
+                        {
+                            <tr>
+                                <td>@row.Label</td>
+                                <td style="text-align:right">@row.Count</td>
+                                <td style="text-align:right">@row.WinRate.ToString("P0", Pt)</td>
+                                <td style="text-align:right">@Signed(row.AverageR)</td>
+                                <td style="text-align:right">@row.TotalR.ToString("+0.0;-0.0;0.0", Pt)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </MudPaper>
+    };
+}

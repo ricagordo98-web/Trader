@@ -58,6 +58,7 @@ public sealed class JournalService(TraderDbContext dbContext) : IJournalService
             EntryPrice = request.EntryPrice,
             Quantity = request.Quantity,
             StopLoss = request.StopLoss,
+            InitialStopLoss = request.StopLoss,
             TakeProfit = request.TakeProfit,
             FxRate = request.FxRate,
             Fees = request.Fees,
@@ -195,6 +196,44 @@ public sealed class JournalService(TraderDbContext dbContext) : IJournalService
         return JournalResult<JournalTradeDto>.Ok(ToDto(trade, await LoadSuggestionsAsync([trade], cancellationToken)));
     }
 
+    public async Task<JournalResult<JournalTradeDto>> UpdateLevelsAsync(string userId, long id, TradeLevelsRequest request, CancellationToken cancellationToken)
+    {
+        JournalTrade? trade = await dbContext.JournalTrades.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId, cancellationToken);
+
+        if (trade is null)
+        {
+            return JournalResult<JournalTradeDto>.Missing();
+        }
+
+        if (trade.Status != TradeStatus.Open)
+        {
+            return JournalResult<JournalTradeDto>.Invalid(["Só podes mudar o stop e o alvo de trades abertas."]);
+        }
+
+        if (request.StopLoss is <= 0 || request.TakeProfit is <= 0 || request.StopLoss is { } s && !double.IsFinite(s) || request.TakeProfit is { } t && !double.IsFinite(t))
+        {
+            return JournalResult<JournalTradeDto>.Invalid(["O stop e o alvo devem ser maiores que zero."]);
+        }
+
+        trade.InitialStopLoss ??= trade.StopLoss;
+
+        if (trade.StopLoss != request.StopLoss)
+        {
+            trade.StopLoss = request.StopLoss;
+            trade.StopLossAlerted = false;
+        }
+
+        if (trade.TakeProfit != request.TakeProfit)
+        {
+            trade.TakeProfit = request.TakeProfit;
+            trade.TakeProfitAlerted = false;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return JournalResult<JournalTradeDto>.Ok(ToDto(trade, await LoadSuggestionsAsync([trade], cancellationToken)));
+    }
+
     public async Task<string?> GetImageAsync(string userId, long id, CancellationToken cancellationToken) =>
         await dbContext.JournalTrades.AsNoTracking().Where(t => t.Id == id && t.UserId == userId).Select(t => t.ChartImage).FirstOrDefaultAsync(cancellationToken);
 
@@ -281,6 +320,7 @@ public sealed class JournalService(TraderDbContext dbContext) : IJournalService
             t.Setup,
             t.Tags,
             t.Emotion,
-            t.ChartImage is not null);
+            t.ChartImage is not null,
+            t.InitialStopLoss);
     }
 }

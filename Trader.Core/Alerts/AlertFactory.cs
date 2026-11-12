@@ -83,6 +83,7 @@ public static class AlertFactory
             EntryPrice = trade.EntryPrice,
             Quantity = trade.Quantity,
             StopLoss = trade.StopLoss,
+            InitialStopLoss = trade.InitialStopLoss,
             FxRate = trade.FxRate,
             Fees = trade.Fees,
             Status = TradeStatus.Closed,

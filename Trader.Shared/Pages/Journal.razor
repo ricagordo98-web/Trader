@@ -27,6 +27,19 @@
         <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4">@riskMessage</MudAlert>
     }
 
+    @if (_system is { CanTrade: false } blocked)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4">
+            O teu sistema bloqueia novas trades: @string.Join(" ", blocked.Blockers) <MudLink Href="/system" Color="Color.Inherit" Underline="Underline.Always">Ver sistema</MudLink>
+        </MudAlert>
+    }
+    else if (_system is { PendingReviews: > 0 } pending)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+            Tens @pending.PendingReviews trade(s) fechada(s) por rever. <MudLink Href="/system?tab=revisoes">Rever agora</MudLink>
+        </MudAlert>
+    }
+
     @if (_loading)
     {
         <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" />
@@ -56,6 +69,7 @@
                     <MudSpacer />
                     <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.FileDownload" OnClick="ExportCsvAsync" Disabled="@(_trades.Count == 0)">Exportar CSV</MudButton>
                     <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.FileUpload" OnClick="ImportCsvAsync">Importar CSV</MudButton>
+                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Psychology" Href="/assistant">Perguntar ao assistente</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => OpenTradeDialogAsync(null))">Nova trade</MudButton>
                 </div>
 
@@ -124,6 +138,16 @@
                                     @if (context.Status == TradeStatus.Open)
                                     {
                                         <MudTooltip Text="Fechar trade"><MudIconButton Icon="@Icons.Material.Filled.CheckCircleOutline" Size="Size.Small" aria-label="@($"Fechar {context.Symbol}")" OnClick="@(() => CloseTradeDialogAsync(context))" /></MudTooltip>
+                                        <MudTooltip Text="Alterar stop e alvo"><MudIconButton Icon="@Icons.Material.Filled.SwapVert" Size="Size.Small" aria-label="@($"Stop e alvo de {context.Symbol}")" OnClick="@(() => EditLevelsAsync(context))" /></MudTooltip>
+                                    }
+                                    else if (Record(context.Id) is { ReviewedAt: null })
+                                    {
+                                        <MudTooltip Text="Rever esta trade"><MudIconButton Icon="@Icons.Material.Filled.RateReview" Color="Color.Warning" Size="Size.Small" aria-label="@($"Rever {context.Symbol}")" OnClick="@(() => ReviewAsync(context))" /></MudTooltip>
+                                    }
+
+                                    @if (Record(context.Id) is { HasDossier: true })
+                                    {
+                                        <MudTooltip Text="O que sabias quando entraste"><MudIconButton Icon="@Icons.Material.Filled.Assignment" Size="Size.Small" aria-label="@($"Dossiê de {context.Symbol}")" OnClick="@(() => ShowDossierAsync(context))" /></MudTooltip>
                                     }
                                     <MudTooltip Text="Ver gráfico com entrada, stop e alvo"><MudIconButton Icon="@Icons.Material.Filled.CandlestickChart" Size="Size.Small" aria-label="@($"Gráfico {context.Symbol}")" OnClick="@(() => OpenChartAsync(context))" /></MudTooltip>
                                     <MudTooltip Text="Setup, emoção, etiquetas, notas e imagem"><MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" aria-label="@($"Detalhes {context.Symbol}")" OnClick="@(() => EditDetailsAsync(context))" /></MudTooltip>
@@ -131,13 +155,30 @@
                                 </MudTd>
                             </RowTemplate>
                             <ChildRowContent>
-                                @if (!string.IsNullOrWhiteSpace(context.Notes) || context.Setup.Length > 0 || context.Tags.Length > 0 || context.Emotion.Length > 0 || context.HasImage)
+                                @if (!string.IsNullOrWhiteSpace(context.Notes) || context.Setup.Length > 0 || context.Tags.Length > 0 || context.Emotion.Length > 0 || context.HasImage || Record(context.Id) is not null)
                                 {
                                     <MudTd colspan="6">
                                         <MudText Typo="Typo.caption" Class="symbol-name">
                                             @(string.Join(" · ", new[] { context.Setup, context.Emotion, context.Tags }.Where(x => x.Length > 0)))@(context.HasImage ? " · 🖼 imagem" : string.Empty)
                                             @(string.IsNullOrWhiteSpace(context.Notes) ? string.Empty : "📝 " + context.Notes)
                                         </MudText>
+                                        @if (Record(context.Id) is { } record)
+                                        {
+                                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0">@SystemStatistics.PhaseLabel(record.Phase) · plano v@(record.PlanVersion)</MudChip>
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(record.RuleBreaks == 0 ? Color.Success : Color.Warning)" Class="ma-0">
+                                                    @(record.RuleBreaks == 0 ? "dentro das regras" : $"quebrou {record.RuleBreaks} regra(s)")
+                                                </MudChip>
+                                                @if (record.ReviewedAt is not null)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0">revista</MudChip>
+                                                }
+                                            </div>
+                                            @if (record.Justification.Length > 0)
+                                            {
+                                                <MudText Typo="Typo.caption" Class="symbol-name d-block">Justificação: @record.Justification</MudText>
+                                            }
+                                        }
                                     </MudTd>
                                 }
                             </ChildRowContent>
@@ -174,6 +215,8 @@
     private JournalStats _stats = new(0, 0, 0, 0, 0, 0, null, 0, null, 0, 0, 0, [], 0, null, null, []);
     private JournalInsights _insights = new(0, [], [], [], [], [], [], [], [], 0, 0, null, null);
     private DailyRiskStatus? _risk;
+    private SystemStatus? _system;
+    private IReadOnlyDictionary<long, TradeRecordDto> _records = new Dictionary<long, TradeRecordDto>();
     private CostModel _costs = new();
     private LeverageSettings _leverage = new();
     private TradePrefill? _prefill;
@@ -320,6 +363,48 @@
         _stats = await Api.GetJournalStatsAsync(_cts.Token);
         _insights = await Api.GetJournalInsightsAsync(_cts.Token);
         _risk = await Api.GetDailyRiskAsync(_cts.Token);
+
+        try
+        {
+            _system = await Api.GetSystemStatusAsync(_cts.Token);
+            _records = (await Api.GetTradeRecordsAsync(_cts.Token)).ToDictionary(r => r.TradeId);
+        }
+        catch (HttpRequestException)
+        {
+        }
+    }
+
+    private TradeRecordDto? Record(long id) => _records.GetValueOrDefault(id);
+
+    private async Task EditLevelsAsync(JournalTradeDto trade)
+    {
+        DialogParameters<TradeLevelsDialog> parameters = new() { { x => x.Trade, trade } };
+        IDialogReference dialog = await DialogService.ShowAsync<TradeLevelsDialog>("Stop e alvo", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+
+        if (!(await dialog.Result)?.Canceled ?? false)
+        {
+            await ReloadTradesAsync();
+            Snackbar.Add("Stop e alvo atualizados.", Severity.Success);
+        }
+    }
+
+    private async Task ReviewAsync(JournalTradeDto trade)
+    {
+        PendingReview review = new(trade.Id, trade.Symbol, trade.Direction, trade.ExitTime, trade.RMultiple, trade.NetPnl, Record(trade.Id)?.SetupName ?? string.Empty, Record(trade.Id)?.RuleBreaks ?? 0);
+        DialogParameters<TradeReviewDialog> parameters = new() { { x => x.Review, review } };
+        IDialogReference dialog = await DialogService.ShowAsync<TradeReviewDialog>("Rever trade", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+
+        if (!(await dialog.Result)?.Canceled ?? false)
+        {
+            await ReloadTradesAsync();
+            Snackbar.Add("Revisão guardada.", Severity.Success);
+        }
+    }
+
+    private async Task ShowDossierAsync(JournalTradeDto trade)
+    {
+        DialogParameters<StoredDossierDialog> parameters = new() { { x => x.TradeId, trade.Id } };
+        await DialogService.ShowAsync<StoredDossierDialog>(trade.Symbol, parameters, new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true, CloseOnEscapeKey = true });
     }
 
     private async Task OpenChartAsync(JournalTradeDto trade)

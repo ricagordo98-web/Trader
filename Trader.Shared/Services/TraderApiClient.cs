@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using Trader.Core.Agender;
 using Trader.Core.Analysis;
+using Trader.Core.Assistant;
+using Trader.Core.TradingSystem;
 using Trader.Core.Learning;
 using Trader.Core.Projection;
 using Trader.Core.Rotation;
@@ -699,6 +701,125 @@ public sealed class TraderApiClient(HttpClient httpClient)
     public async Task<string?> SaveAccountAsync(AccountProfile profile, CancellationToken cancellationToken = default)
     {
         using HttpResponseMessage response = await httpClient.PutAsJsonAsync("api/journal/account", profile, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<AssistantStatus> GetAssistantStatusAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<AssistantStatus>("api/assistant/status", cancellationToken) ?? new AssistantStatus(false, "sem modelo", false, string.Empty);
+
+    public async Task<(AssistantReply? Reply, string? Error)> AskAssistantAsync(AssistantRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/assistant/ask", request, cancellationToken);
+
+        return response.IsSuccessStatusCode
+            ? (await response.Content.ReadFromJsonAsync<AssistantReply>(cancellationToken), null)
+            : (null, await ApiError.ReadAsync(response));
+    }
+
+    public async Task<TradeDossier?> GetDossierAsync(string symbol, TradeDirection? direction, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.GetAsync($"api/assistant/dossier/{Uri.EscapeDataString(symbol)}{(direction is { } d ? $"?direction={(int)d}" : string.Empty)}", cancellationToken);
+        return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<TradeDossier>(cancellationToken) : null;
+    }
+
+    public async Task<SystemStatus?> GetSystemStatusAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<SystemStatus>("api/system-trading/status", cancellationToken);
+
+    public async Task<TradingPlanDto?> GetPlanAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<TradingPlanDto>("api/system-trading/plan", cancellationToken);
+
+    public async Task<string?> SavePlanAsync(SavePlanRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PutAsJsonAsync("api/system-trading/plan", request, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<IReadOnlyList<TradingSetupDto>> GetSetupsAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<IReadOnlyList<TradingSetupDto>>("api/system-trading/setups", cancellationToken) ?? [];
+
+    public async Task<string?> SaveSetupAsync(long? id, SaveSetupRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = id is { } existing
+            ? await httpClient.PutAsJsonAsync($"api/system-trading/setups/{existing}", request, cancellationToken)
+            : await httpClient.PostAsJsonAsync("api/system-trading/setups", request, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<bool> DeleteSetupAsync(long id, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.DeleteAsync($"api/system-trading/setups/{id}", cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<(SetupBacktestResult? Result, string? Error)> BacktestSetupAsync(long id, SetupBacktestRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync($"api/system-trading/setups/{id}/backtest", request, cancellationToken);
+
+        return response.IsSuccessStatusCode
+            ? (await response.Content.ReadFromJsonAsync<SetupBacktestResult>(cancellationToken), null)
+            : (null, await ApiError.ReadAsync(response));
+    }
+
+    public async Task<PreTradeCheck?> CheckTradeAsync(PreTradeRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/system-trading/check", request, cancellationToken);
+        return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<PreTradeCheck>(cancellationToken) : null;
+    }
+
+    public async Task<SystemTradeResult> OpenSystemTradeAsync(SystemTradeRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/system-trading/trades", request, cancellationToken);
+
+        if (response.Content.Headers.ContentType?.MediaType == "application/json" && await response.Content.ReadFromJsonAsync<SystemTradeResult>(cancellationToken) is { } result)
+        {
+            return result;
+        }
+
+        return new SystemTradeResult(null, null, [await ApiError.ReadAsync(response)]);
+    }
+
+    public async Task<IReadOnlyList<TradeRecordDto>> GetTradeRecordsAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<IReadOnlyList<TradeRecordDto>>("api/system-trading/records", cancellationToken) ?? [];
+
+    public async Task<TradeDossier?> GetStoredDossierAsync(long tradeId, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.GetAsync($"api/system-trading/records/{tradeId}/dossier", cancellationToken);
+        return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<TradeDossier>(cancellationToken) : null;
+    }
+
+    public async Task<string?> ReviewTradeAsync(long tradeId, TradeReviewRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync($"api/system-trading/records/{tradeId}/review", request, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<IReadOnlyList<PendingReview>> GetPendingReviewsAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<IReadOnlyList<PendingReview>>("api/system-trading/reviews/pending", cancellationToken) ?? [];
+
+    public async Task<WeekSummary?> GetCurrentWeekAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<WeekSummary>("api/system-trading/reviews/week", cancellationToken);
+
+    public async Task<IReadOnlyList<WeeklyReviewDto>> GetWeeklyReviewsAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<IReadOnlyList<WeeklyReviewDto>>("api/system-trading/reviews/weekly", cancellationToken) ?? [];
+
+    public async Task<string?> SaveWeeklyReviewAsync(SaveWeeklyReviewRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsJsonAsync("api/system-trading/reviews/weekly", request, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<string?> PromotePhaseAsync(CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PostAsync("api/system-trading/phase/promote", null, cancellationToken);
+        return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
+    }
+
+    public async Task<SystemPerformance?> GetSystemPerformanceAsync(CancellationToken cancellationToken = default) =>
+        await httpClient.GetFromJsonAsync<SystemPerformance>("api/system-trading/performance", cancellationToken);
+
+    public async Task<string?> UpdateTradeLevelsAsync(long id, TradeLevelsRequest request, CancellationToken cancellationToken = default)
+    {
+        using HttpResponseMessage response = await httpClient.PutAsJsonAsync($"api/journal/trades/{id}/levels", request, cancellationToken);
         return response.IsSuccessStatusCode ? null : await ApiError.ReadAsync(response);
     }
 }

@@ -7,6 +7,7 @@ using Trader.Core.Learning;
 using Trader.Core.Models;
 using Trader.Core.Projection;
 using Trader.Core.Simulator;
+using Trader.Core.TradingSystem;
 
 namespace Trader.Infrastructure.Persistence;
 
@@ -25,6 +26,10 @@ public sealed class TraderDbContext(DbContextOptions<TraderDbContext> options) :
     public DbSet<PriceAlert> PriceAlerts => Set<PriceAlert>();
     public DbSet<ProjectionRecord> ProjectionRecords => Set<ProjectionRecord>();
     public DbSet<LearningItem> LearningItems => Set<LearningItem>();
+    public DbSet<TradingPlan> TradingPlans => Set<TradingPlan>();
+    public DbSet<TradingSetup> TradingSetups => Set<TradingSetup>();
+    public DbSet<TradeRecord> TradeRecords => Set<TradeRecord>();
+    public DbSet<WeeklyReview> WeeklyReviews => Set<WeeklyReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -123,6 +128,56 @@ public sealed class TraderDbContext(DbContextOptions<TraderDbContext> options) :
             entity.Property(t => t.Status).HasConversion<string>().HasMaxLength(16);
             entity.Property(t => t.EntryTime).HasConversion(utcTicks);
             entity.Property(t => t.ExitTime).HasConversion(utcTicks);
+        });
+
+        modelBuilder.Entity<TradingPlan>(entity =>
+        {
+            entity.HasIndex(p => new { p.UserId, p.Version }).IsUnique();
+            entity.Property(p => p.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(p => p.Description).HasMaxLength(4000);
+            entity.Property(p => p.ChangeNote).HasMaxLength(500);
+            entity.Property(p => p.RulesJson).IsRequired();
+            entity.Property(p => p.CreatedAt).HasConversion(utcTicks);
+        });
+
+        modelBuilder.Entity<TradingSetup>(entity =>
+        {
+            entity.HasIndex(s => s.UserId);
+            entity.Property(s => s.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(s => s.Name).HasMaxLength(40).IsRequired();
+            entity.Property(s => s.Description).HasMaxLength(2000);
+            entity.Property(s => s.EntryCriteria).HasMaxLength(2000);
+            entity.Property(s => s.ExitCriteria).HasMaxLength(2000);
+            entity.Property(s => s.Checklist).HasMaxLength(4000);
+            entity.Property(s => s.StrategyJson).IsRequired();
+            entity.Property(s => s.CreatedAt).HasConversion(utcTicks);
+        });
+
+        modelBuilder.Entity<TradeRecord>(entity =>
+        {
+            entity.HasKey(r => r.TradeId);
+            entity.Property(r => r.TradeId).ValueGeneratedNever();
+            entity.HasIndex(r => r.UserId);
+            entity.HasOne<JournalTrade>().WithOne().HasForeignKey<TradeRecord>(r => r.TradeId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(r => r.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(r => r.SetupName).HasMaxLength(40);
+            entity.Property(r => r.Phase).HasConversion<string>().HasMaxLength(16);
+            entity.Property(r => r.Justification).HasMaxLength(1000);
+            entity.Property(r => r.WentWell).HasMaxLength(1000);
+            entity.Property(r => r.WentWrong).HasMaxLength(1000);
+            entity.Property(r => r.Lesson).HasMaxLength(1000);
+            entity.Property(r => r.ReviewedAt).HasConversion(utcTicks);
+        });
+
+        modelBuilder.Entity<WeeklyReview>(entity =>
+        {
+            entity.HasIndex(r => new { r.UserId, r.WeekStart });
+            entity.Property(r => r.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(r => r.WhatWorked).HasMaxLength(2000);
+            entity.Property(r => r.WhatFailed).HasMaxLength(2000);
+            entity.Property(r => r.RuleBreaks).HasMaxLength(2000);
+            entity.Property(r => r.Decision).HasMaxLength(2000);
+            entity.Property(r => r.CreatedAt).HasConversion(utcTicks);
         });
 
         modelBuilder.Entity<PriceAlert>(entity =>

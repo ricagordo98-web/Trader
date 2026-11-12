@@ -1,0 +1,47 @@
+@using System.Globalization
+
+<div class="pretrade">
+    <MudAlert Severity="@VerdictSeverity" Variant="Variant.Outlined" Dense="true" Class="mb-3">@Check.Verdict</MudAlert>
+
+    @foreach (CheckItem item in Visible)
+    {
+        <div class="d-flex align-start gap-2 mb-2">
+            <MudIcon Icon="@IconFor(item)" Color="@ColorFor(item)" Size="Size.Small" Class="mt-1" />
+            <div>
+                <MudText Typo="Typo.body2"><b>@item.Label</b>@(item.Severity == CheckSeverity.Hard ? " · obrigatória" : string.Empty)</MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name">@item.Detail</MudText>
+            </div>
+        </div>
+    }
+
+    @if (Check.Items.Count > Visible.Count)
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _showAll = !_showAll)">@(_showAll ? "Mostrar só o que falha" : $"Ver as {Check.Items.Count} regras")</MudButton>
+    }
+</div>
+
+@code {
+    private bool _showAll;
+
+    [Parameter, EditorRequired] public PreTradeCheck Check { get; set; } = default!;
+
+    private IReadOnlyList<CheckItem> Visible => _showAll
+        ? Check.Items
+        : Check.Items.Where(i => i.Status != CheckStatus.Pass).ToList();
+
+    private Severity VerdictSeverity => Check.Blocked ? Severity.Error : Check.NeedsJustification ? Severity.Warning : Severity.Success;
+
+    private static string IconFor(CheckItem item) => item.Status switch
+    {
+        CheckStatus.Pass => Icons.Material.Filled.CheckCircle,
+        CheckStatus.Fail => item.Severity == CheckSeverity.Hard ? Icons.Material.Filled.Block : Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+
+    private static Color ColorFor(CheckItem item) => item.Status switch
+    {
+        CheckStatus.Pass => Color.Success,
+        CheckStatus.Fail => item.Severity == CheckSeverity.Hard ? Color.Error : Color.Warning,
+        _ => Color.Default
+    };
+}

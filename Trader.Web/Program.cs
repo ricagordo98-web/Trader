@@ -125,6 +125,7 @@ app.MapCalendarEndpoints();
 app.MapChartTemplateEndpoints();
 app.MapSummaryEndpoints();
 app.MapSettingsEndpoints();
+app.MapTradingSystemEndpoints();
 app.MapHub<NewsHub>("/hubs/news").RequireAuthorization();
 
 app.MapRazorComponents<App>()

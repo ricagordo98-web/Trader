@@ -330,6 +330,9 @@ namespace Trader.Infrastructure.Persistence.Migrations
                     b.Property<double>("FxRate")
                         .HasColumnType("REAL");
 
+                    b.Property<double?>("InitialStopLoss")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1159,6 +1162,245 @@ namespace Trader.Infrastructure.Persistence.Migrations
                     b.ToTable("PaperTrades");
                 });
 
+            modelBuilder.Entity("Trader.Core.TradingSystem.TradeRecord", b =>
+                {
+                    b.Property<long>("TradeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("BreakEvenAlerted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("BreakEvenAtR")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("ChecklistJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DossierJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("FollowedPlan")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Lesson")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("MaeR")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool?>("ManagementFollowed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MaxHoldingDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("MfeR")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("PartialAlerted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("PartialAtR")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PlanVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("ReviewedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RuleBreaks")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("SetupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SetupName")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("TimeAlerted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WentWell")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WentWrong")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TradeId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TradeRecords");
+                });
+
+            modelBuilder.Entity("Trader.Core.TradingSystem.TradingPlan", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ChangeNote")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RulesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("TradingPlans");
+                });
+
+            modelBuilder.Entity("Trader.Core.TradingSystem.TradingSetup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Checklist")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EntryCriteria")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExitCriteria")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Image")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StrategyJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TradingSetups");
+                });
+
+            modelBuilder.Entity("Trader.Core.TradingSystem.WeeklyReview", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RuleBreaks")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SummaryJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("WeekStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WhatFailed")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WhatWorked")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "WeekStart");
+
+                    b.ToTable("WeeklyReviews");
+                });
+
             modelBuilder.Entity("Trader.Infrastructure.Persistence.AppUser", b =>
                 {
                     b.Property<string>("Id")
@@ -1279,6 +1521,15 @@ namespace Trader.Infrastructure.Persistence.Migrations
                     b.HasOne("Trader.Core.Models.Article", null)
                         .WithMany("Symbols")
                         .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Trader.Core.TradingSystem.TradeRecord", b =>
+                {
+                    b.HasOne("Trader.Core.Journal.JournalTrade", null)
+                        .WithOne()
+                        .HasForeignKey("Trader.Core.TradingSystem.TradeRecord", "TradeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

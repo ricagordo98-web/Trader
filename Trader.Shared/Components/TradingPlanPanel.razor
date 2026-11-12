@@ -1,0 +1,307 @@
+@using System.Globalization
+@inject TraderApiClient Api
+@inject ISnackbar Snackbar
+
+@if (_plan is null)
+{
+    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="240px" />
+}
+else
+{
+    @if (!_plan.Exists)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+            Ainda não escreveste o teu plano. Preenche as regras (os valores já vêm com predefinições prudentes), escreve os teus princípios e guarda. A partir daí, cada trade é verificada contra este plano.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="symbol-name mb-3">
+            Versão @_plan.Version · guardada a @_plan.CreatedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm", Pt). Cada trade fica ligada à versão do plano com que foi feita.
+        </MudText>
+    }
+
+    @if (!_plan.Editable)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4">@_plan.LockedReason</MudAlert>
+    }
+
+    <MudText Typo="Typo.subtitle2" Class="mb-1">Os meus princípios</MudText>
+    <MudTextField T="string" @bind-Value="_description" Lines="4" MaxLength="4000" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!_plan.Editable)"
+                  Placeholder="Em que mercados e situações opero, porquê, e o que nunca faço." Class="mb-4" />
+
+    <MudExpansionPanels MultiExpansion="true" Class="mb-4">
+        <MudExpansionPanel Text="Risco e qualidade da trade" Expanded="true">
+            <MudGrid Spacing="2">
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.RiskPercent" Label="Risco por trade (% do capital)" Min="0" Max="10" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.MinRewardRisk" Label="R:R mínimo" Min="0" Max="10" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.MaxOpenPositions" Label="Posições abertas (máx.)" Min="0" Max="100" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudSwitch T="bool" @bind-Value="_f.RequireSetup" Label="Exigir setup do playbook" Color="Color.Primary" Disabled="@(!_plan.Editable)" /></MudItem>
+            </MudGrid>
+        </MudExpansionPanel>
+
+        <MudExpansionPanel Text="Disjuntores (bloqueiam novas trades)">
+            <MudGrid Spacing="2">
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.MaxTradesPerDay" Label="Trades por dia (máx.)" Min="0" Max="100" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.MaxDailyLossPercent" Label="Perda diária (% do capital)" Min="0" Max="50" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.MaxWeeklyLossPercent" Label="Perda semanal (% do capital)" Min="0" Max="50" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.MaxConsecutiveLosses" Label="Perdas seguidas até pausa" Min="0" Max="50" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.CooldownHours" Label="Pausa (horas)" Min="0" Max="720" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.MaxPendingReviews" Label="Revisões pendentes (máx.)" Min="0" Max="50" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.caption" Class="symbol-name mt-2">Um valor 0 desliga essa regra. Estes limites são obrigatórios: não há justificação que os ultrapasse.</MudText>
+        </MudExpansionPanel>
+
+        <MudExpansionPanel Text="Filtros: onde e quando posso entrar">
+            <MudText Typo="Typo.caption" Class="symbol-name mb-1">Mercados permitidos (nenhum selecionado = todos)</MudText>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach ((AssetClass value, string label) in Classes)
+                {
+                    AssetClass current = value;
+                    <MudChip T="string" Variant="@(_f.Classes.Contains(current) ? Variant.Filled : Variant.Outlined)" Color="@(_f.Classes.Contains(current) ? Color.Primary : Color.Default)"
+                             Disabled="@(!_plan.Editable)" OnClick="@(() => ToggleClass(current))">@label</MudChip>
+                }
+            </div>
+            <MudGrid Spacing="2">
+                <MudItem xs="6" md="3"><MudNumericField T="int?" @bind-Value="_f.StartHour" Label="Só depois das (h)" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Clearable="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int?" @bind-Value="_f.EndHour" Label="Só antes das (h)" Min="0" Max="24" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Clearable="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.EarningsBlackoutHours" Label="Sem entrar antes de resultados (h)" Min="0" Max="720" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.MacroBlackoutHours" Label="Sem entrar antes de macro forte (h)" Min="0" Max="168" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable || !_f.AvoidHighImpactMacro)" /></MudItem>
+                <MudItem xs="6" md="3"><MudSwitch T="bool" @bind-Value="_f.AvoidHighImpactMacro" Label="Evitar macro de alto impacto" Color="Color.Primary" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.MaxCorrelation" Label="Correlação a partir da qual é a mesma aposta" Min="0" Max="1" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.MaxCorrelatedPositions" Label="Posições correlacionadas (máx.)" Min="1" Max="20" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudSwitch T="bool" @bind-Value="_f.AllowJustifiedBreaks" Label="Permitir quebrar regras com justificação" Color="Color.Primary" Disabled="@(!_plan.Editable)" /></MudItem>
+            </MudGrid>
+        </MudExpansionPanel>
+
+        <MudExpansionPanel Text="Gestão da trade (avisos)">
+            <MudGrid Spacing="2">
+                <MudItem xs="6" md="4"><MudNumericField T="double" @bind-Value="_f.BreakEvenAtR" Label="Mover stop para a entrada aos (R)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="4"><MudNumericField T="double" @bind-Value="_f.PartialAtR" Label="Realizar parcial aos (R)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="4"><MudNumericField T="int" @bind-Value="_f.MaxHoldingDays" Label="Tempo máximo aberta (dias)" Min="0" Max="365" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.caption" Class="symbol-name mt-2">A app avisa-te quando a trade chega a estes pontos. Não mexe nas ordens da corretora; és tu que as alteras. Estas regras são copiadas para cada trade quando a abres.</MudText>
+        </MudExpansionPanel>
+
+        <MudExpansionPanel Text="Checklist manual antes de entrar">
+            <MudTextField T="string" @bind-Value="_f.Checklist" Lines="5" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!_plan.Editable)" HelperText="Uma pergunta por linha. Todas têm de ser confirmadas para gravar a trade." />
+        </MudExpansionPanel>
+
+        <MudExpansionPanel Text="Fases: papel, real pequeno e tamanho normal">
+            <MudGrid Spacing="2">
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.PaperTrades" Label="Trades em papel para avançar" Min="0" Max="1000" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.SmallTrades" Label="Trades em real pequeno para avançar" Min="0" Max="1000" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.MinAdherence" Label="Adesão mínima ao plano (%)" Min="0" Max="100" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.SmallRiskPercent" Label="Risco em real pequeno (% do normal)" Min="1" Max="100" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="int" @bind-Value="_f.DemotionWindow" Label="Janela para recuar de fase (trades)" Min="0" Max="500" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+                <MudItem xs="6" md="3"><MudNumericField T="double" @bind-Value="_f.DemotionAverageR" Label="Recuar se R médio ≤" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Disabled="@(!_plan.Editable)" /></MudItem>
+            </MudGrid>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    @if (_plan.Editable)
+    {
+        <MudTextField T="string" @bind-Value="_changeNote" Label="O que mudaste e porquê" MaxLength="500" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Required="@(_plan.Exists)" />
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_error</MudAlert>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="SaveAsync">Guardar plano</MudButton>
+    }
+
+    @if (_plan.History.Count > 1)
+    {
+        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">Versões anteriores</MudText>
+
+        @foreach (PlanVersionInfo version in _plan.History)
+        {
+            <MudText Typo="Typo.caption" Class="symbol-name d-block">v@(version.Version) · @version.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy", Pt) · @(string.IsNullOrWhiteSpace(version.ChangeNote) ? "sem nota" : version.ChangeNote)</MudText>
+        }
+    }
+}
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+
+    private static readonly (AssetClass Value, string Label)[] Classes =
+    [
+        (AssetClass.Stock, "Ações"),
+        (AssetClass.Etf, "ETFs"),
+        (AssetClass.Commodity, "Matérias-primas"),
+        (AssetClass.Forex, "Forex"),
+        (AssetClass.Crypto, "Cripto"),
+        (AssetClass.Index, "Índices")
+    ];
+
+    private sealed class Form
+    {
+        public double RiskPercent { get; set; }
+        public double MinRewardRisk { get; set; }
+        public int MaxOpenPositions { get; set; }
+        public bool RequireSetup { get; set; }
+        public int MaxTradesPerDay { get; set; }
+        public double MaxDailyLossPercent { get; set; }
+        public double MaxWeeklyLossPercent { get; set; }
+        public int MaxConsecutiveLosses { get; set; }
+        public int CooldownHours { get; set; }
+        public int MaxPendingReviews { get; set; }
+        public HashSet<AssetClass> Classes { get; set; } = [];
+        public int? StartHour { get; set; }
+        public int? EndHour { get; set; }
+        public int EarningsBlackoutHours { get; set; }
+        public bool AvoidHighImpactMacro { get; set; }
+        public int MacroBlackoutHours { get; set; }
+        public double MaxCorrelation { get; set; }
+        public int MaxCorrelatedPositions { get; set; }
+        public bool AllowJustifiedBreaks { get; set; }
+        public double BreakEvenAtR { get; set; }
+        public double PartialAtR { get; set; }
+        public int MaxHoldingDays { get; set; }
+        public string Checklist { get; set; } = string.Empty;
+        public int PaperTrades { get; set; }
+        public int SmallTrades { get; set; }
+        public double MinAdherence { get; set; }
+        public double SmallRiskPercent { get; set; }
+        public int DemotionWindow { get; set; }
+        public double DemotionAverageR { get; set; }
+
+        public static Form From(TradingRules r) => new()
+        {
+            RiskPercent = r.RiskPercent,
+            MinRewardRisk = r.MinRewardRisk,
+            MaxOpenPositions = r.MaxOpenPositions,
+            RequireSetup = r.RequireSetup,
+            MaxTradesPerDay = r.MaxTradesPerDay,
+            MaxDailyLossPercent = r.MaxDailyLossPercent,
+            MaxWeeklyLossPercent = r.MaxWeeklyLossPercent,
+            MaxConsecutiveLosses = r.MaxConsecutiveLosses,
+            CooldownHours = r.CooldownHours,
+            MaxPendingReviews = r.MaxPendingReviews,
+            Classes = r.AllowedAssetClasses.ToHashSet(),
+            StartHour = r.TradingStartHour,
+            EndHour = r.TradingEndHour,
+            EarningsBlackoutHours = r.EarningsBlackoutHours,
+            AvoidHighImpactMacro = r.AvoidHighImpactMacro,
+            MacroBlackoutHours = r.MacroBlackoutHours,
+            MaxCorrelation = r.MaxCorrelation,
+            MaxCorrelatedPositions = r.MaxCorrelatedPositions,
+            AllowJustifiedBreaks = r.AllowJustifiedBreaks,
+            BreakEvenAtR = r.BreakEvenAtR,
+            PartialAtR = r.PartialAtR,
+            MaxHoldingDays = r.MaxHoldingDays,
+            Checklist = string.Join('\n', r.Checklist),
+            PaperTrades = r.PaperTradesToPromote,
+            SmallTrades = r.SmallTradesToPromote,
+            MinAdherence = r.MinAdherencePercent,
+            SmallRiskPercent = r.SmallRiskFactor * 100,
+            DemotionWindow = r.DemotionWindow,
+            DemotionAverageR = r.DemotionAverageR
+        };
+
+        public TradingRules ToRules() => new()
+        {
+            RiskPercent = RiskPercent,
+            MinRewardRisk = MinRewardRisk,
+            MaxOpenPositions = MaxOpenPositions,
+            RequireSetup = RequireSetup,
+            MaxTradesPerDay = MaxTradesPerDay,
+            MaxDailyLossPercent = MaxDailyLossPercent,
+            MaxWeeklyLossPercent = MaxWeeklyLossPercent,
+            MaxConsecutiveLosses = MaxConsecutiveLosses,
+            CooldownHours = CooldownHours,
+            MaxPendingReviews = MaxPendingReviews,
+            AllowedAssetClasses = Classes.ToList(),
+            TradingStartHour = StartHour,
+            TradingEndHour = EndHour,
+            EarningsBlackoutHours = EarningsBlackoutHours,
+            AvoidHighImpactMacro = AvoidHighImpactMacro,
+            MacroBlackoutHours = MacroBlackoutHours,
+            MaxCorrelation = MaxCorrelation,
+            MaxCorrelatedPositions = MaxCorrelatedPositions,
+            AllowJustifiedBreaks = AllowJustifiedBreaks,
+            BreakEvenAtR = BreakEvenAtR,
+            PartialAtR = PartialAtR,
+            MaxHoldingDays = MaxHoldingDays,
+            Checklist = Checklist.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            PaperTradesToPromote = PaperTrades,
+            SmallTradesToPromote = SmallTrades,
+            MinAdherencePercent = MinAdherence,
+            SmallRiskFactor = SmallRiskPercent / 100,
+            DemotionWindow = DemotionWindow,
+            DemotionAverageR = DemotionAverageR
+        };
+    }
+
+    private TradingPlanDto? _plan;
+    private Form _f = new();
+    private string _description = string.Empty;
+    private string _changeNote = string.Empty;
+    private string? _error;
+    private bool _busy;
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _plan = await Api.GetPlanAsync();
+
+            if (_plan is not null)
+            {
+                _f = Form.From(_plan.Rules);
+                _description = _plan.Description;
+                _changeNote = string.Empty;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível carregar o plano.";
+        }
+    }
+
+    private void ToggleClass(AssetClass value)
+    {
+        if (!_f.Classes.Add(value))
+        {
+            _f.Classes.Remove(value);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+
+        if (_plan is { Exists: true } && string.IsNullOrWhiteSpace(_changeNote))
+        {
+            _error = "Escreve o que mudaste e porquê: é o que te protege de mudar o plano por impulso.";
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            _error = await Api.SavePlanAsync(new SavePlanRequest(_f.ToRules(), _description, _changeNote, null));
+
+            if (_error is null)
+            {
+                Snackbar.Add("Plano guardado.", Severity.Success);
+                await LoadAsync();
+                await OnSaved.InvokeAsync();
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível guardar. Verifica se o servidor está a correr.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
