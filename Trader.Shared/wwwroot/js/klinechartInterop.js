@@ -329,6 +329,12 @@ function createDrawing(state, definition) {
     }
 }
 
+function applyPhoneStyles(chart, container) {
+    if (container && container.clientWidth > 0 && container.clientWidth < 600) {
+        chart.setStyles({ candle: { tooltip: { showRule: 'follow_cross' } } });
+    }
+}
+
 export function create(id, container, dotnet, dark, showVolume) {
     registerRectangle();
     registerExtras();
@@ -357,6 +363,7 @@ export function create(id, container, dotnet, dark, showVolume) {
     };
 
     chart.setStyles(dark ? 'dark' : 'light');
+    applyPhoneStyles(chart, container);
     chart.setDataLoader({
         subscribeBar: ({ callback }) => { state.pushCallback = callback; },
         unsubscribeBar: () => { state.pushCallback = null; },
@@ -650,7 +657,11 @@ export function clearAlertLine(id) {
 }
 
 export function setTheme(id, dark) {
-    charts.get(id)?.chart.setStyles(dark ? 'dark' : 'light');
+    const themed = charts.get(id);
+    if (themed) {
+        themed.chart.setStyles(dark ? 'dark' : 'light');
+        applyPhoneStyles(themed.chart, themed.container);
+    }
 }
 
 export function toggleIndicator(id, name, mainPane) {

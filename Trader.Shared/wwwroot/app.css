@@ -119,7 +119,7 @@ a.news-title:hover { color: var(--mud-palette-primary); }
 /* ---- bottom navigation (phones) ---- */
 .bottom-nav { display: none; }
 @media (max-width: 599.98px) {
-    .trader-main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); overflow-x: hidden; }
+    .trader-main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); overflow-x: hidden; overflow-x: clip; }
     .trader-main .mud-container { padding-left: 12px !important; padding-right: 12px !important; padding-top: 12px !important; }
     .trader-appbar .mud-toolbar { padding-left: 4px; padding-right: 4px; }
     .trader-appbar .trader-brand { font-size: 1.05rem; letter-spacing: .14em; }
