@@ -23,6 +23,7 @@ public enum SuggestionStatus
 public static class SuggestionVariants
 {
     public const string Projection = "P";
+    public const string WideStop = "W";
 }
 
 public sealed class Suggestion

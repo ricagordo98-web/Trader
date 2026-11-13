@@ -98,7 +98,13 @@
                             <div class="d-flex align-center gap-3">
                                 <div class="text-center">
                                     <ConfidenceGauge Value="@(suggestion.CalibratedConfidence ?? suggestion.Confidence)" />
-                                    @if (suggestion.CalibratedConfidence is not null)
+                                    @if (suggestion.CalibrationFlat)
+                                    {
+                                        <MudTooltip Text="@($"Em {suggestion.CalibrationSamples} sugestões fechadas, a certeza do modelo não distinguiu ganhos de perdas: o acerto é quase o mesmo em todos os níveis. Este valor é só a taxa de acerto média, não uma previsão para este caso.")">
+                                            <MudText Typo="Typo.caption" Color="Color.Warning">sem poder preditivo</MudText>
+                                        </MudTooltip>
+                                    }
+                                    else if (suggestion.CalibratedConfidence is not null)
                                     {
                                         <MudTooltip Text="@($"Acerto histórico de sugestões com esta certeza do modelo ({suggestion.CalibrationSamples} sugestões fechadas, incluindo as só em registo). O modelo indica {(suggestion.Confidence * 100).ToString("0", CultureInfo.InvariantCulture)}%, mas este é o acerto que se verificou na prática.")">
                                             <MudText Typo="Typo.caption" Class="symbol-name">acerto histórico</MudText>

@@ -36,7 +36,8 @@ public sealed record SuggestionDto(
     double? SmartR = null,
     double? CostR = null,
     string Variant = "A",
-    AssetClass? Class = null);
+    AssetClass? Class = null,
+    bool CalibrationFlat = false);
 
 public sealed record CurvePoint(DateTimeOffset Time, double CumulativeR);
 

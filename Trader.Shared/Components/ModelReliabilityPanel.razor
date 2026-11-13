@@ -129,6 +129,20 @@
         </MudPaper>
     }
 
+    @if (report.WideStop is { } wide)
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4 mt-2">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">Teste ao vivo: stop largo (3×/6× ATR) contra o atual</MudText>
+            <MudText Typo="Typo.body2">
+                @wide.Pairs pares fechados (a mesma entrada com os dois stops). R líquido médio: atual <strong>@wide.CurrentNetR.ToString("+0.000;-0.000;0.000", Pt)</strong> · largo <strong>@wide.WideNetR.ToString("+0.000;-0.000;0.000", Pt)</strong>
+                · diferença <strong>@wide.Difference.ToString("+0.000;-0.000;0.000", Pt)</strong> (@wide.DifferenceLow.ToString("+0.000;-0.000;0.000", Pt) a @wide.DifferenceHigh.ToString("+0.000;-0.000;0.000", Pt)).
+            </MudText>
+            <MudText Typo="Typo.caption" Class="symbol-name d-block mt-1">
+                @wide.Hint O backtest de 10 anos indicou +0,010 R por operação a favor do stop largo. Esta variante só é registada, não aparece nas sugestões nem influencia o modelo.
+            </MudText>
+        </MudPaper>
+    }
+
     @if (report.Shadow is { } shadow && (shadow.Hidden is not null || shadow.ByReason.Count > 0))
     {
         <MudPaper Elevation="0" Outlined="true" Class="pa-4 mt-2">

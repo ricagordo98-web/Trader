@@ -52,7 +52,8 @@ public sealed record ModelReliabilityReport(
     double AverageCostR = 0,
     int IndependentCases = 0,
     Interval? ClusteredAverageRCi = null,
-    ProjectionPerformance? Projection = null);
+    ProjectionPerformance? Projection = null,
+    WideStopComparison? WideStop = null);
 
 public sealed record ProjectionPerformance(int Count, double PredictedWinRate, double ActualWinRate, int TargetHits, int StopHits, int Expired, double AverageR);
 

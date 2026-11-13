@@ -90,4 +90,6 @@ public sealed record BacktestResult(
     bool UsedSentiment = false,
     bool UsedMarketContext = false,
     FeatureResearch? Research = null,
-    BacktestRobustness? Robustness = null);
+    BacktestRobustness? Robustness = null,
+    ChallengerReport? Challengers = null,
+    ExitStudy? Exits = null);

@@ -243,3 +243,14 @@ public class AdaptivePriceFormatTests
     public void Adaptive_KeepsSignificantDigitsForTinyPrices(double value, string expected) =>
         PriceFormat.Adaptive(value, System.Globalization.CultureInfo.GetCultureInfo("pt-PT")).Should().Be(expected);
 }
+
+public class CalibrationFlatTests
+{
+    [Fact]
+    public void IsFlat_SameProbabilityEverywhere_ReturnsTrue() =>
+        new ConfidenceCalibration([new CalibrationPoint(0.6, 0.44), new CalibrationPoint(0.8, 0.45)], 100, 0.44).IsFlat.Should().BeTrue();
+
+    [Fact]
+    public void IsFlat_ProbabilityRisesWithConfidence_ReturnsFalse() =>
+        new ConfidenceCalibration([new CalibrationPoint(0.6, 0.40), new CalibrationPoint(0.8, 0.60)], 100, 0.5).IsFlat.Should().BeFalse();
+}

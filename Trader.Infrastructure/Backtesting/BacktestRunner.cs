@@ -47,6 +47,7 @@ public static class BacktestRunner
         List<BacktestTrade> baseline = [];
         List<double> buyAndHold = [];
         List<ResearchSample> research = [];
+        List<ExitSample> exits = [];
         DateTimeOffset from = DateTimeOffset.MaxValue;
         DateTimeOffset to = DateTimeOffset.MinValue;
         int tested = 0;
@@ -108,7 +109,7 @@ public static class BacktestRunner
 
                 if (snapshot is not null && (i - WarmupBars) % ResearchStride == 0)
                 {
-                    CollectResearch(research, engine, history, candles, i, snapshot, scoring, request.Costs);
+                    CollectResearch(research, exits, engine, history, candles, i, snapshot, scoring, request.Costs);
                 }
 
                 SentimentSnapshot sentiment = rows is null ? NoSentiment : SentimentAt(rows, candles[i].Time, scoring);
@@ -172,13 +173,16 @@ public static class BacktestRunner
             useSentiment,
             useContext,
             FeatureEdgeAnalyzer.Analyze(research, ResearchFeatures.Labels),
-            BacktestRobustnessCalculator.Calculate(strategy));
+            BacktestRobustnessCalculator.Calculate(strategy),
+            ChallengerEvaluator.Evaluate(research),
+            ExitStudyAnalyzer.Analyze(exits));
     }
 
     private const int ResearchStride = 10;
 
     private static void CollectResearch(
         List<ResearchSample> research,
+        List<ExitSample> exits,
         SuggestionEngine engine,
         SymbolHistory history,
         IReadOnlyList<Candle> candles,
@@ -197,8 +201,34 @@ public static class BacktestRunner
             if (simulated is not null)
             {
                 research.Add(new ResearchSample(history.Symbol, history.AssetClass, candles[index].Time, direction, simulated.Trade.NetR, ResearchFeatures.From(snapshot, direction, score)));
+                exits.Add(new ExitSample(candles[index].Time, ExitVariantsNetR(history, candles, index, direction, snapshot, simulated.Trade.NetR, engine, costs)));
             }
         }
+    }
+
+    private static List<double> ExitVariantsNetR(
+        SymbolHistory history,
+        IReadOnlyList<Candle> candles,
+        int index,
+        TradeDirection direction,
+        MarketSnapshot snapshot,
+        double currentNetR,
+        SuggestionEngine engine,
+        CostModel costs)
+    {
+        List<double> result = [currentNetR];
+        double entry = candles[index].Close;
+        int sign = direction == TradeDirection.Buy ? 1 : -1;
+
+        foreach (ExitVariant variant in ExitStudyAnalyzer.Variants.Skip(1))
+        {
+            double stop = entry - sign * variant.StopAtr!.Value * snapshot.Atr;
+            double target = entry + sign * variant.TargetAtr!.Value * snapshot.Atr;
+            Simulated? simulated = Simulate(history, candles, index, direction, stop, target, variant.ExpiryDays, costs);
+            result.Add(simulated?.Trade.NetR ?? double.NaN);
+        }
+
+        return result.Any(double.IsNaN) ? [.. result.Select(_ => double.NaN)] : result;
     }
 
     private const int SentimentWarmupDays = 3;
@@ -242,6 +272,17 @@ public static class BacktestRunner
         double stopLoss,
         double takeProfit,
         ScoringOptions scoring,
+        CostModel costs) =>
+        Simulate(history, candles, index, direction, stopLoss, takeProfit, scoring.ExpiryDays, costs);
+
+    private static Simulated? Simulate(
+        SymbolHistory history,
+        IReadOnlyList<Candle> candles,
+        int index,
+        TradeDirection direction,
+        double stopLoss,
+        double takeProfit,
+        int expiryDays,
         CostModel costs)
     {
         double entry = candles[index].Close;
@@ -253,7 +294,7 @@ public static class BacktestRunner
         }
 
         DateTimeOffset createdAt = candles[index].Time;
-        DateTimeOffset expiresAt = createdAt.AddDays(scoring.ExpiryDays);
+        DateTimeOffset expiresAt = createdAt.AddDays(expiryDays);
         DateTimeOffset lastTime = candles[^1].Time;
 
         Suggestion suggestion = new()

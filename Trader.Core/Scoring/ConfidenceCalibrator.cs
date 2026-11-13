@@ -4,6 +4,10 @@ public sealed record CalibrationPoint(double Confidence, double Probability);
 
 public sealed record ConfidenceCalibration(IReadOnlyList<CalibrationPoint> Points, int Samples, double BaseRate)
 {
+    public const double FlatSpread = 0.06;
+
+    public bool IsFlat => Points.Count == 0 || Points.Max(p => p.Probability) - Points.Min(p => p.Probability) < FlatSpread;
+
     public double Apply(double confidence)
     {
         if (Points.Count == 0)

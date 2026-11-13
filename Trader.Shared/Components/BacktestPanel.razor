@@ -256,6 +256,92 @@ else
         </MudPaper>
     }
 
+    @if (r.Challengers is { } challengers)
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="mb-4">
+            <div class="pa-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Modelos challenger (walk-forward)</MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name">
+                    Modelos candidatos testados só em anos que não viram no treino. Cada um escolhe os 20% de entradas que prevê serem melhores; o R líquido médio de todas as entradas é @Signed(challengers.UniverseNetR) R.
+                </MudText>
+            </div>
+
+            @if (challengers.Results.Count > 0)
+            {
+                <MudTable Items="challengers.Results" Dense="true" Elevation="0" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Modelo</MudTh>
+                        <MudTh Style="text-align:right">Escolhidas</MudTh>
+                        <MudTh Style="text-align:right">R líquido médio</MudTh>
+                        <MudTh Style="text-align:right">Intervalo</MudTh>
+                        <MudTh Style="text-align:right">Anos positivos</MudTh>
+                        <MudTh>Veredito</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Label</MudTd>
+                        <MudTd Style="text-align:right">@context.Selected.ToString("N0", CultureInfo.GetCultureInfo("pt-PT"))</MudTd>
+                        <MudTd Style="text-align:right">@Signed(context.AverageNetR) R</MudTd>
+                        <MudTd Style="text-align:right">@Signed(context.ConfidenceLow) a @Signed(context.ConfidenceHigh)</MudTd>
+                        <MudTd Style="text-align:right">@context.PositiveYears/@context.TestYears</MudTd>
+                        <MudTd>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@ChallengerColor(context.Verdict)" Class="ma-0">@ChallengerLabel(context.Verdict)</MudChip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+
+            <ul class="about-list pa-4">
+                @foreach (string note in challengers.Notes)
+                {
+                    <li>@note</li>
+                }
+            </ul>
+        </MudPaper>
+    }
+
+    @if (r.Exits is { Variants.Count: > 0 } exits)
+    {
+        <MudPaper Elevation="0" Outlined="true" Class="mb-4">
+            <div class="pa-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Teste de saídas (stop, alvo e prazo)</MudText>
+                <MudText Typo="Typo.caption" Class="symbol-name">
+                    @exits.Samples.ToString("N0", CultureInfo.GetCultureInfo("pt-PT")) entradas hipotéticas, cada uma com as mesmas entradas e saídas diferentes. A diferença é face à saída atual, em R líquido.
+                </MudText>
+            </div>
+            <MudTable Items="exits.Variants" Dense="true" Elevation="0" Hover="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Saída</MudTh>
+                    <MudTh Style="text-align:right">R líquido médio</MudTh>
+                    <MudTh Style="text-align:right">Diferença</MudTh>
+                    <MudTh Style="text-align:right">Intervalo</MudTh>
+                    <MudTh Style="text-align:right">Anos melhores</MudTh>
+                    <MudTh>Veredito</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Label</MudTd>
+                    <MudTd Style="text-align:right">@Signed(context.AverageNetR) R</MudTd>
+                    <MudTd Style="text-align:right">@(context.Name == "current" ? "—" : Signed(context.DifferenceVsCurrent) + " R")</MudTd>
+                    <MudTd Style="text-align:right">@(context.Name == "current" ? "—" : Signed(context.DifferenceLow) + " a " + Signed(context.DifferenceHigh))</MudTd>
+                    <MudTd Style="text-align:right">@(context.Name == "current" ? "—" : $"{context.BetterYears}/{context.Years}")</MudTd>
+                    <MudTd>
+                        @if (context.Name != "current")
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@(context.Verdict == ExitStudyAnalyzer.VerdictBetter ? Color.Success : context.Verdict == ExitStudyAnalyzer.VerdictWorse ? Color.Error : Color.Default)" Class="ma-0">
+                                @(context.Verdict == ExitStudyAnalyzer.VerdictBetter ? "Melhor" : context.Verdict == ExitStudyAnalyzer.VerdictWorse ? "Pior" : "Igual")
+                            </MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            <ul class="about-list pa-4">
+                @foreach (string note in exits.Notes)
+                {
+                    <li>@note</li>
+                }
+            </ul>
+        </MudPaper>
+    }
+
     <MudPaper Elevation="0" Outlined="true" Class="pa-4">
         <MudText Typo="Typo.subtitle1" Class="mb-2">Limitações a ter em conta</MudText>
         <ul class="about-list">
@@ -368,6 +454,20 @@ else
         FeatureEdgeAnalyzer.VerdictPossible => "Possível",
         FeatureEdgeAnalyzer.VerdictWeak => "Fraco",
         _ => "Sem sinal"
+    };
+
+    private static Color ChallengerColor(string verdict) => verdict switch
+    {
+        ChallengerEvaluator.VerdictAccepted => Color.Success,
+        ChallengerEvaluator.VerdictWeak => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string ChallengerLabel(string verdict) => verdict switch
+    {
+        ChallengerEvaluator.VerdictAccepted => "Aceite",
+        ChallengerEvaluator.VerdictWeak => "Fraco",
+        _ => "Rejeitado"
     };
 
     private static Severity VerdictSeverity(string code) => code switch

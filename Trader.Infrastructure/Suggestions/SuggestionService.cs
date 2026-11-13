@@ -199,7 +199,7 @@ public sealed class SuggestionService(
 
     public async Task<IReadOnlyList<SuggestionDto>> GetAsync(string? symbol, bool? open, int limit, SuggestionHorizon? horizon, CancellationToken cancellationToken, bool includeShadow = false)
     {
-        IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking().Where(s => s.Variant != SuggestionVariants.Projection);
+        IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking().Where(s => s.Variant != SuggestionVariants.Projection && s.Variant != SuggestionVariants.WideStop);
 
         if (!includeShadow)
         {
@@ -256,7 +256,7 @@ public sealed class SuggestionService(
                 }
 
                 return calibrations[(r.Horizon, rowClass)] is { } calibration
-                    ? dto with { CalibratedConfidence = calibration.Apply(r.Confidence), CalibrationSamples = calibration.Samples }
+                    ? dto with { CalibratedConfidence = calibration.Apply(r.Confidence), CalibrationSamples = calibration.Samples, CalibrationFlat = calibration.IsFlat }
                     : dto;
             })
             .ToList();
@@ -289,7 +289,7 @@ public sealed class SuggestionService(
 
         var closed = await dbContext.Suggestions
             .AsNoTracking()
-            .Where(s => s.Status != SuggestionStatus.Open && s.RMultiple != null && s.Variant != SuggestionVariants.Projection)
+            .Where(s => s.Status != SuggestionStatus.Open && s.RMultiple != null && s.Variant != SuggestionVariants.Projection && s.Variant != SuggestionVariants.WideStop)
             .Select(s => new { s.EvidenceJson, R = s.RMultiple!.Value })
             .ToListAsync(cancellationToken);
 
@@ -327,7 +327,7 @@ public sealed class SuggestionService(
 
         List<Suggestion> closed = await dbContext.Suggestions
             .AsNoTracking()
-            .Where(s => s.Horizon == horizon && s.Status != SuggestionStatus.Open && s.RMultiple != null && s.Variant != SuggestionVariants.Projection)
+            .Where(s => s.Horizon == horizon && s.Status != SuggestionStatus.Open && s.RMultiple != null && s.Variant != SuggestionVariants.Projection && s.Variant != SuggestionVariants.WideStop)
             .ToListAsync(cancellationToken);
 
         Dictionary<string, AssetClass> classes = await dbContext.Instruments.AsNoTracking().ToDictionaryAsync(i => i.Symbol, i => i.AssetClass, cancellationToken);
@@ -412,7 +412,7 @@ public sealed class SuggestionService(
             .ToListAsync(cancellationToken)).ToHashSet();
 
         HashSet<(string Symbol, TradeDirection Direction)> openShadows = (await dbContext.Suggestions
-            .Where(s => s.IsShadow && s.Status == SuggestionStatus.Open && s.Horizon == SuggestionHorizon.Swing)
+            .Where(s => s.IsShadow && s.Variant == "A" && s.Status == SuggestionStatus.Open && s.Horizon == SuggestionHorizon.Swing)
             .Select(s => new { s.Symbol, s.Direction })
             .ToListAsync(cancellationToken)).Select(s => (s.Symbol, s.Direction)).ToHashSet();
         int shadowsRecorded = 0;
@@ -475,6 +475,7 @@ public sealed class SuggestionService(
                 dbContext.Suggestions.Add(entity);
                 added.Add(entity);
                 created++;
+                dbContext.Suggestions.Add(ToWideStopTwin(draft, market, now, now.AddDays(scoring.ExpiryDays)));
             }
             catch (HttpRequestException ex)
             {
@@ -670,6 +671,16 @@ public sealed class SuggestionService(
         Status = SuggestionStatus.Open,
         Horizon = horizon
     };
+
+    private static Suggestion ToWideStopTwin(SuggestionDraft draft, MarketSnapshot market, DateTimeOffset now, DateTimeOffset expiresAt)
+    {
+        (double stopLoss, double takeProfit) = SuggestionEngine.ComputeWideLevels(market, draft.Direction);
+        Suggestion twin = ToEntity(draft with { StopLoss = stopLoss, TakeProfit = takeProfit, RiskReward = SuggestionEngine.WideTargetAtr / SuggestionEngine.WideStopAtr }, now, expiresAt, SuggestionHorizon.Swing);
+        twin.IsShadow = true;
+        twin.ShadowReason = "variante de stop largo (3×/6× ATR)";
+        twin.Variant = SuggestionVariants.WideStop;
+        return twin;
+    }
 
     private static Suggestion ToShadowEntity(SuggestionDraft draft, DateTimeOffset now, DateTimeOffset expiresAt, SuggestionHorizon horizon, string? extraReason)
     {

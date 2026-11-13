@@ -19,7 +19,12 @@ public sealed class ModelReliabilityService(TraderDbContext dbContext, IMarketDa
 
     public async Task<ModelReliabilityReport> GetReportAsync(SuggestionHorizon? horizon, CancellationToken cancellationToken)
     {
-        return ModelReliability.CalculateWithShadow(await LoadClosedAsync(horizon, cancellationToken, includeProjection: true));
+        ModelReliabilityReport report = ModelReliability.CalculateWithShadow(await LoadClosedAsync(horizon, cancellationToken, includeProjection: true));
+        List<Suggestion> twins = await dbContext.Suggestions.AsNoTracking()
+            .Where(s => s.Status != SuggestionStatus.Open && s.Horizon == SuggestionHorizon.Swing && (s.Variant == SuggestionVariants.WideStop || (s.Variant == "A" && !s.IsShadow)))
+            .ToListAsync(cancellationToken);
+
+        return report with { WideStop = WideStopComparer.Compare(await WithCostsAsync(twins, cancellationToken)) };
     }
 
     public async Task<WeightLearning> GetWeightLearningAsync(SuggestionHorizon horizon, CancellationToken cancellationToken)
@@ -105,14 +110,18 @@ public sealed class ModelReliabilityService(TraderDbContext dbContext, IMarketDa
     private async Task<List<SuggestionDto>> LoadClosedAsync(SuggestionHorizon? horizon, CancellationToken cancellationToken, bool includeProjection = false)
     {
         IQueryable<Suggestion> query = dbContext.Suggestions.AsNoTracking()
-            .Where(s => s.Status != SuggestionStatus.Open && (includeProjection || s.Variant != SuggestionVariants.Projection));
+            .Where(s => s.Status != SuggestionStatus.Open && (includeProjection || s.Variant != SuggestionVariants.Projection) && s.Variant != SuggestionVariants.WideStop);
 
         if (horizon is not null)
         {
             query = query.Where(s => s.Horizon == horizon);
         }
 
-        List<Suggestion> closed = await query.ToListAsync(cancellationToken);
+        return await WithCostsAsync(await query.ToListAsync(cancellationToken), cancellationToken);
+    }
+
+    private async Task<List<SuggestionDto>> WithCostsAsync(List<Suggestion> closed, CancellationToken cancellationToken)
+    {
         Dictionary<string, AssetClass> classes = await dbContext.Instruments.AsNoTracking().ToDictionaryAsync(i => i.Symbol, i => i.AssetClass, cancellationToken);
         CostModel costs = new();
 

@@ -212,6 +212,15 @@ public sealed class SuggestionEngine(ScoringOptions options)
             $"RSI {Format(market.Rsi, "0")} ({rsiTag}) e MACD {macdTag}");
     }
 
+    public const double WideStopAtr = 3;
+    public const double WideTargetAtr = 6;
+
+    public static (double StopLoss, double TakeProfit) ComputeWideLevels(MarketSnapshot market, TradeDirection direction)
+    {
+        int sign = direction == TradeDirection.Buy ? 1 : -1;
+        return (market.Price - sign * WideStopAtr * market.Atr, market.Price + sign * WideTargetAtr * market.Atr);
+    }
+
     public (double StopLoss, double TakeProfit) ComputeLevels(MarketSnapshot market, TradeDirection direction)
     {
         double atr = market.Atr;
